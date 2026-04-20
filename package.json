@@ -1,7 +1,7 @@
 {
-  "name": "wordpress-qa-master",
-  "version": "1.0.0",
-  "description": "Automated QA pipeline for WordPress plugins — code, DB, performance, functional, visual, UI/UX",
+  "name": "plugorbit",
+  "version": "1.1.0",
+  "description": "PlugOrbit — WordPress Plugin QA Intelligence. Code, DB, performance, functional, visual, UI/UX — all driven via Claude Code skills.",
   "scripts": {
     "test": "playwright test tests/playwright/",
     "test:tpa": "playwright test tests/playwright/tpa/",
