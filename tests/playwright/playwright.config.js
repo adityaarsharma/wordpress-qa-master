@@ -85,6 +85,32 @@ module.exports = defineConfig({
       dependencies: ['setup'],
       testMatch: '**/responsive.spec.js',
     },
+
+    // ── Video recording — every test recorded to reports/videos/ ──
+    {
+      name: 'video',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: AUTH_FILE,
+        video: { mode: 'on', size: { width: 1280, height: 800 } },
+        screenshot: 'on',
+      },
+      testMatch: '**/flows/**/*.spec.js',
+      dependencies: ['setup'],
+    },
+
+    // ── Elementor widget QA — widget-by-widget testing ──
+    {
+      name: 'elementor-widgets',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: AUTH_FILE,
+        video: { mode: 'on', size: { width: 1440, height: 900 } },
+        screenshot: 'on',
+      },
+      testMatch: '**/elementor/**/*.spec.js',
+      dependencies: ['setup'],
+    },
   ],
 
   // WP Playground server for CI
