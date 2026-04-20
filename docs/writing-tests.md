@@ -8,7 +8,7 @@
 
 ```bash
 # Pick the template closest to your plugin type
-cp -r tests/playwright/templates/elementor-addon tests/playwright/my-plugin
+cp -r tests/playwright/templates/Page Builder-addon tests/playwright/my-plugin
 # or: gutenberg-block, seo-plugin, woocommerce, theme, generic-plugin
 ```
 
@@ -181,17 +181,17 @@ test('homepage passes WCAG 2.1 AA', async ({ page }) => {
 });
 ```
 
-### Elementor-specific — widget appears in panel
+### Page Builder-specific — widget appears in panel
 
 ```js
-test('My Widget appears in Elementor panel', async ({ page }) => {
+test('My Widget appears in Page Builder panel', async ({ page }) => {
   await page.goto('/wp-admin/post-new.php?post_type=page');
-  await page.click('#elementor-switch-mode-button');
-  await page.waitForSelector('#elementor-panel-elements-wrapper');
+  await page.click('#Page Builder-switch-mode-button');
+  await page.waitForSelector('#Page Builder-panel-elements-wrapper');
 
-  await page.fill('#elementor-panel-elements-search-input', 'My Widget');
+  await page.fill('#Page Builder-panel-elements-search-input', 'My Widget');
   await expect(
-    page.locator('.elementor-element:has-text("My Widget")')
+    page.locator('.Page Builder-element:has-text("My Widget")')
   ).toBeVisible();
 });
 ```
