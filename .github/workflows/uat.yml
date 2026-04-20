@@ -1,0 +1,150 @@
+name: UAT Flow Comparison
+
+# Runs automatically on every push to main and every PR.
+# Also has a manual trigger (workflow_dispatch) with a custom title.
+# Output: UAT HTML report uploaded as a downloadable artifact.
+# On PRs: posts a comment with a direct link to the artifact.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      report_title:
+        description: 'Report title (e.g. "Plugin A vs Plugin B — v2.1")'
+        required: false
+        default: 'UAT Flow Comparison'
+
+env:
+  WP_TEST_URL: http://localhost:9400
+  NODE_VERSION: '20'
+
+jobs:
+  uat-compare:
+    name: Run flows + generate PM report
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Node + npm cache ────────────────────────────────────────────────
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      # ── 3. Python (built-in on ubuntu, just verify) ────────────────────────
+      - name: Check Python
+        run: python3 --version
+
+      # ── 4. Playwright browsers ─────────────────────────────────────────────
+      - name: Install Playwright + Chromium
+        run: npx playwright install --with-deps chromium
+
+      # ── 5. Start WP Playground ─────────────────────────────────────────────
+      # Uses setup/playground-blueprint.json which installs the plugin under test.
+      # Blueprint must install + activate the plugin and any companions.
+      - name: Start WP Playground server
+        run: |
+          npx @wp-playground/cli server \
+            --blueprint=setup/playground-blueprint.json \
+            --port=9400 &
+          echo "Waiting for Playground to boot..."
+          timeout 90 bash -c 'until curl -sf http://localhost:9400/ > /dev/null; do sleep 2; done'
+          echo "Playground is up."
+
+      # ── 6. Auth setup (save admin cookies once) ────────────────────────────
+      - name: Auth setup
+        run: |
+          npx playwright test \
+            --config=tests/playwright/playwright.config.js \
+            --project=setup
+        env:
+          WP_TEST_URL: ${{ env.WP_TEST_URL }}
+
+      # ── 7. Core functional tests ───────────────────────────────────────────
+      # Runs chromium project (all tests in tests/playwright/ except flows/)
+      - name: Run core functional tests
+        run: |
+          npx playwright test \
+            --config=tests/playwright/playwright.config.js \
+            --project=chromium \
+            --reporter=line
+        env:
+          WP_TEST_URL: ${{ env.WP_TEST_URL }}
+        continue-on-error: true  # don't block report generation if some tests fail
+
+      # ── 8. Flow comparison tests (video project) ───────────────────────────
+      # These produce the screenshots + videos that feed the PM HTML report.
+      # testMatch: **/flows/**/*.spec.js — all files under tests/playwright/flows/
+      - name: Run flow comparison tests (video)
+        run: |
+          npx playwright test \
+            --config=tests/playwright/playwright.config.js \
+            --project=video \
+            --reporter=line
+        env:
+          WP_TEST_URL: ${{ env.WP_TEST_URL }}
+        continue-on-error: true  # collect all flows even if some fail
+
+      # ── 9. Generate deep PM HTML report ────────────────────────────────────
+      - name: Generate UAT report
+        run: |
+          TITLE="${{ github.event.inputs.report_title || format('UAT — {0} #{1}', github.ref_name, github.run_number) }}"
+          python3 scripts/generate-uat-report.py \
+            --title "$TITLE" \
+            --snaps  reports/screenshots/flows-compare \
+            --videos reports/videos \
+            --out    reports/uat-report.html
+          echo "Report size: $(du -sh reports/uat-report.html | cut -f1)"
+
+      # ── 10. Upload everything as artifact ──────────────────────────────────
+      - name: Upload UAT report artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uat-report-${{ github.run_number }}
+          path: |
+            reports/uat-report.html
+            reports/screenshots/flows-compare/
+            reports/playwright-html/
+          retention-days: 30
+
+      # ── 11. Post PR comment with artifact link ─────────────────────────────
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              '## UAT Report Ready',
+              '',
+              `**Run**: [#${context.runId}](${runUrl})`,
+              `**Branch**: \`${context.ref.replace('refs/heads/', '')}\``,
+              '',
+              '📥 **[Download UAT HTML Report from Artifacts](' + runUrl + ')**',
+              '',
+              'The report includes:',
+              '- Per-flow screenshots (Plugin A vs Plugin B)',
+              '- Recorded videos for every flow',
+              '- PM analysis, wins/gaps/actions per flow',
+              '- RICE backlog',
+              '- IA recommendations',
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

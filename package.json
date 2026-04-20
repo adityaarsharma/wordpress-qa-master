@@ -13,7 +13,9 @@
     "compare": "bash scripts/compare-versions.sh",
     "db-profile": "bash scripts/db-profile.sh",
     "report": "playwright show-report reports/playwright-html",
-    "install-deps": "bash setup/install.sh"
+    "install-deps": "bash setup/install.sh",
+    "uat": "npx playwright test --config=tests/playwright/playwright.config.js --project=video --reporter=line && python3 scripts/generate-uat-report.py --title 'UAT Report' --snaps reports/screenshots/flows-compare --videos reports/videos --out reports/uat-report.html && open reports/uat-report.html",
+    "uat:ci": "npx playwright test --config=tests/playwright/playwright.config.js --project=video --reporter=line && python3 scripts/generate-uat-report.py --title 'UAT Report' --snaps reports/screenshots/flows-compare --videos reports/videos --out reports/uat-report.html"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.9.1",

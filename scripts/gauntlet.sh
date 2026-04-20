@@ -224,6 +224,41 @@ if command -v npx &>/dev/null && [ -f "$PW_CONFIG" ]; then
   log "- HTML report: $HTML_REPORT"
   echo -e "  ${CYAN}HTML report:${NC} $(pwd)/$HTML_REPORT"
   echo -e "  ${CYAN}View with:${NC} npx playwright show-report reports/playwright-html"
+
+  # ── STEP 6b: Flow comparison videos (feeds PM HTML report) ─────────────────
+  FLOW_SPECS=$(find tests/playwright/flows -name "*.spec.js" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$FLOW_SPECS" -gt 0 ]; then
+    echo ""
+    echo -e "  ${CYAN}Running $FLOW_SPECS flow spec(s) with video recording...${NC}"
+    mkdir -p reports/screenshots/flows-compare reports/videos
+
+    WP_TEST_URL="${WP_TEST_URL:-http://localhost:8881}" \
+      npx playwright test --config="$PW_CONFIG" \
+      --project=video \
+      --reporter=line 2>&1 | tail -5 || true
+
+    FLOW_SNAPS=$(ls reports/screenshots/flows-compare/*.png 2>/dev/null | wc -l | tr -d ' ')
+    FLOW_VIDS=$(find reports/videos -name "*.webm" -o -name "*.mp4" 2>/dev/null | wc -l | tr -d ' ')
+    ok "Flow videos: $FLOW_VIDS videos | $FLOW_SNAPS screenshots"
+    log "- ✓ Flow recording: $FLOW_VIDS videos, $FLOW_SNAPS screenshots"
+
+    # Generate deep PM HTML report
+    UAT_HTML="reports/uat-report-$TIMESTAMP.html"
+    python3 scripts/generate-uat-report.py \
+      --title "UAT Report — $(date +%Y-%m-%d)" \
+      --snaps "reports/screenshots/flows-compare" \
+      --videos "reports/videos" \
+      --out "$UAT_HTML" 2>/dev/null && {
+      ok "PM report generated: $UAT_HTML"
+      log "- ✓ PM report: $UAT_HTML"
+      echo -e "  ${CYAN}Open report:${NC} open $(pwd)/$UAT_HTML"
+      ((PASS++))
+    } || {
+      warn "PM report generation failed — run: python3 scripts/generate-uat-report.py"
+      log "- ⚠ PM report: generation failed"
+      ((WARN++))
+    }
+  fi
 else
   warn "Playwright not configured — skipping. Run: npm install && npx playwright install"
   log "- ⚠ Playwright: skipped (not configured)"
