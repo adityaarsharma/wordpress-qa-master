@@ -261,6 +261,65 @@ if [ "$MODE" = "full" ] && [ "$ENV" = "local" ]; then
   log "- See reports/db-profile-$TIMESTAMP.txt"
 fi
 
+# ── STEP 9: COMPETITOR COMPARISON (auto from qa.config.json) ──────────────────
+if [ -f "qa.config.json" ]; then
+  COMPETITORS_JSON=$(python3 -c "import json; c=json.load(open('qa.config.json')).get('competitors',[]); print(','.join(c))" 2>/dev/null || echo "")
+  if [ -n "$COMPETITORS_JSON" ]; then
+    header "Step 9: Competitor Comparison"
+    log "## Step 9: Competitor Comparison"
+    bash scripts/competitor-compare.sh 2>/dev/null && {
+      ok "Competitor analysis complete — see reports/competitor-*.md"
+      log "- ✓ Competitor: see reports/competitor-*.md"
+      ((PASS++))
+    } || {
+      warn "Competitor analysis failed — run manually: bash scripts/competitor-compare.sh"
+      log "- ⚠ Competitor: failed"
+      ((WARN++))
+    }
+  fi
+fi
+
+# ── STEP 10: UI / FRONTEND PERFORMANCE ────────────────────────────────────────
+if [ "$MODE" = "full" ]; then
+  header "Step 10: UI / Frontend Performance"
+  log "## Step 10: UI Performance"
+
+  PLUGIN_TYPE=$(python3 -c "import json; print(json.load(open('qa.config.json'))['plugin']['type'])" 2>/dev/null || echo "general")
+  WP_PERF_URL="${WP_TEST_URL:-http://localhost:8881}"
+
+  # Editor performance (Elementor or Gutenberg editor load time)
+  if [ "$PLUGIN_TYPE" = "elementor-addon" ] || [ "$PLUGIN_TYPE" = "gutenberg-blocks" ]; then
+    if [ -f "scripts/editor-perf.sh" ]; then
+      EDITOR_REPORT="reports/editor-perf-$TIMESTAMP.json"
+      REPORT_PATH="$EDITOR_REPORT" bash scripts/editor-perf.sh \
+        --url "$WP_PERF_URL" 2>/dev/null && {
+        ok "Editor performance measured — see $EDITOR_REPORT"
+        log "- ✓ Editor perf: $EDITOR_REPORT"
+        ((PASS++))
+      } || {
+        warn "Editor perf failed — run manually: bash scripts/editor-perf.sh"
+        log "- ⚠ Editor perf: failed"
+        ((WARN++))
+      }
+    fi
+  else
+    # For SEO/WooCommerce/general plugins: measure frontend page load via curl
+    LOAD_TIME=$(curl -o /dev/null -s -w "%{time_total}" "$WP_PERF_URL" 2>/dev/null || echo "?")
+    TTFB=$(curl -o /dev/null -s -w "%{time_starttransfer}" "$WP_PERF_URL" 2>/dev/null || echo "?")
+    if [ "$LOAD_TIME" != "?" ]; then
+      LOAD_MS=$(echo "$LOAD_TIME * 1000" | bc 2>/dev/null | cut -d. -f1 || echo "?")
+      TTFB_MS=$(echo "$TTFB * 1000" | bc 2>/dev/null | cut -d. -f1 || echo "?")
+      ok "Frontend: total ${LOAD_MS}ms | TTFB ${TTFB_MS}ms"
+      log "- ✓ Frontend load: ${LOAD_MS}ms | TTFB: ${TTFB_MS}ms"
+      ((PASS++))
+    else
+      warn "Frontend perf check failed — is wp-env running? Start with: bash scripts/create-test-site.sh"
+      log "- ⚠ Frontend perf: could not reach $WP_PERF_URL"
+      ((WARN++))
+    fi
+  fi
+fi
+
 # ── FINAL REPORT ──────────────────────────────────────────────────────────────
 header "Results"
 log "---"

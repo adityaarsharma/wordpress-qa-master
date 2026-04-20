@@ -1,6 +1,6 @@
 {
   "name": "plugorbit",
-  "version": "1.1.0",
+  "version": "1.6.0",
   "description": "PlugOrbit — WordPress Plugin QA Intelligence. Code, DB, performance, functional, visual, UI/UX — all driven via Claude Code skills.",
   "scripts": {
     "test": "playwright test tests/playwright/",
