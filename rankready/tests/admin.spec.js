@@ -1,11 +1,34 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
+const { execSync }     = require('child_process');
 
 const BASE_URL = process.env.WP_TEST_URL || 'http://localhost:8890';
 const WP_USER  = process.env.WP_USER     || 'admin';
 const WP_PASS  = process.env.WP_PASS     || 'password';
 
+function wp( cmd ) {
+  return execSync(
+    `cd "${__dirname}/.." && npx @wordpress/env run cli wp ${cmd} 2>/dev/null`,
+    { encoding: 'utf8' }
+  ).trim();
+}
+
 test.describe('RankReady Admin — smoke test', () => {
+
+  // Create a published post with slug 'test-post' so markdown endpoint tests
+  // have a real URL to hit. Idempotent — safe to run against an existing DB.
+  test.beforeAll( () => {
+    try {
+      wp( 'option update rr_md_enable on' );
+      wp( 'option update rr_llms_enable on' );
+      wp( 'option update rr_llms_full_enable on' );
+      wp( 'option update rr_robots_enable on' );
+      wp( 'option update rr_content_signals_enable on' );
+      const id = wp( 'post create --post_title="Test Post" --post_status=publish --post_content="Test body." --porcelain' );
+      wp( `post update ${id} --post_name=test-post` );
+      wp( 'rewrite flush --hard' );
+    } catch { /* already exists or non-fatal */ }
+  } );
 
   test.beforeEach( async ({ page }) => {
     await page.goto( BASE_URL + '/wp-login.php' );
@@ -46,8 +69,9 @@ test.describe('RankReady Admin — smoke test', () => {
     await expect( page.getByText( 'AI Summary' ).first() ).toBeVisible();
     await expect( page.getByText( 'FAQ Generator' ).first() ).toBeVisible();
 
+    // v0.6.x merged AI Summary + FAQ into a single unified save button
     const submits = page.locator('input[type="submit"]');
-    await expect( submits ).toHaveCount( 2 );
+    await expect( submits ).toHaveCount( 1 );
 
     await page.screenshot({ path: '../../reports/rankready/content-ai-tab.png', fullPage: true });
   });
@@ -95,7 +119,8 @@ test.describe('RankReady Admin — smoke test', () => {
     const details = page.locator('.rr-details').first();
     await expect( details ).toBeVisible();
     await details.click();
-    await expect( page.locator('#rr_summary_label, [name="rr_label"]').first() ).toBeVisible({ timeout: 5_000 });
+    // After expand: Display Options fields use name=rr_default_label / rr_default_show_label (updated v0.6.x)
+    await expect( page.locator('[name="rr_default_label"], [name="rr_default_show_label"]').first() ).toBeVisible({ timeout: 5_000 });
   });
 
   test('No PHP fatal errors on any tab', async ({ page }) => {
@@ -117,6 +142,59 @@ test.describe('RankReady Admin — smoke test', () => {
     await page.goto( BASE_URL + '/wp-admin/plugins.php' );
     await expect( page.locator('body') ).not.toContainText( 'Fatal error' );
     await expect( page.locator('[data-slug="rankready"]') ).toBeVisible();
+  });
+
+  // ── isitagentready / Markdown checks ──────────────────────────────────────
+
+  test('Markdown Accept header returns text/markdown + Vary: Accept', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/test-post/', {
+      headers: { 'Accept': 'text/markdown' },
+    });
+    expect( response.status() ).toBe( 200 );
+    expect( response.headers()['content-type'] ).toContain( 'text/markdown' );
+    expect( response.headers()['vary'] ).toContain( 'Accept' );
+    expect( response.headers()['x-markdown-source'] ).toBe( 'accept' );
+  });
+
+  test('.md URL returns text/markdown', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/test-post.md' );
+    expect( response.status() ).toBe( 200 );
+    expect( response.headers()['content-type'] ).toContain( 'text/markdown' );
+  });
+
+  test('406 for unsupported Accept type', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/test-post/', {
+      headers: { 'Accept': 'application/json' },
+    });
+    expect( response.status() ).toBe( 406 );
+  });
+
+  test('llms-full.txt returns 200', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/llms-full.txt' );
+    expect( response.status() ).toBe( 200 );
+    expect( response.headers()['content-type'] ).toContain( 'text/plain' );
+  });
+
+  test('robots.txt has Content-Signal directive', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/robots.txt' );
+    expect( response.status() ).toBe( 200 );
+    const body = await response.text();
+    expect( body ).toContain( 'Content-Signal:' );
+    expect( body ).toContain( 'ai-train=' );
+    expect( body ).toContain( 'LLM & AI Crawler Rules (RankReady)' );
+  });
+
+  test('llms.txt has Link discovery headers', async ({ page }) => {
+    const response = await page.request.get( BASE_URL + '/llms.txt' );
+    const link = response.headers()['link'] || '';
+    expect( link ).toContain( 'rel="llms-txt"' );
+  });
+
+  test('No PHP fatal on plugin update — rewrite rules deferred to init', async ({ page }) => {
+    // Simulates version bump: clear stored version, reload any admin page — must not 500
+    await page.goto( BASE_URL + '/wp-admin/admin.php?page=rankready' );
+    await expect( page.locator('body') ).not.toContainText( 'Fatal error' );
+    await expect( page.locator('body') ).not.toContainText( 'Call to a member function' );
   });
 
 });

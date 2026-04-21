@@ -1,9 +1,9 @@
 {
-  "core": "WordPress/WordPress#6.7",
+  "core": null,
   "phpVersion": "8.2",
   "port": 8890,
   "plugins": [
-    "https://github.com/adityaarsharma/rankready/releases/latest/download/rankready-latest.zip"
+    "/Users/adityasharma/Claude/RankReady/rankready"
   ],
   "config": {
     "WP_DEBUG": true,
@@ -11,9 +11,5 @@
     "WP_DEBUG_DISPLAY": false,
     "SCRIPT_DEBUG": true
   },
-  "env": {
-    "tests": {
-      "port": 8891
-    }
-  }
+  "testsEnvironment": false
 }
