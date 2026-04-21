@@ -23,7 +23,14 @@ WARN=0
 echo -e "${CYAN}── Zip Hygiene ──${NC}"
 
 # 1a. Dev directories that must not ship
-BAD_DIRS=(.git .github node_modules tests test spec specs .vscode .idea .circleci)
+# Expanded to match plugin-check `file_type` check + AI development artifacts (2026)
+BAD_DIRS=(
+  .git .github .gitlab .bitbucket .svn .hg
+  node_modules tests test spec specs
+  .vscode .idea .circleci .fleet .zed
+  .cursor .aider .continue .claude .windsurf .codex
+  .cache .parcel-cache .next .nuxt .turbo
+)
 for d in "${BAD_DIRS[@]}"; do
   if [ -d "$PLUGIN_PATH/$d" ]; then
     echo -e "${RED}✗ Dev directory shipped: $d/${NC}"
@@ -33,15 +40,19 @@ done
 
 # 1b. Dev files that must not ship
 BAD_FILES=(
-  ".env" ".env.example" ".env.local"
-  "composer.json" "composer.lock" "package.json" "package-lock.json" "yarn.lock"
-  "webpack.config.js" "rollup.config.js" "vite.config.js" "gulpfile.js" "Gruntfile.js"
-  ".eslintrc" ".eslintrc.js" ".eslintrc.json" ".prettierrc"
-  ".gitignore" ".gitattributes" ".editorconfig"
-  "phpcs.xml" "phpcs.xml.dist" "phpunit.xml" "phpunit.xml.dist" "phpstan.neon"
-  "README.md" "CHANGELOG.md" "CONTRIBUTING.md" # readme.txt is fine, README.md is not
-  "Dockerfile" "docker-compose.yml"
-  "Makefile"
+  ".env" ".env.example" ".env.local" ".env.production"
+  "composer.json" "composer.lock" "package.json" "package-lock.json" "yarn.lock" "pnpm-lock.yaml" "bun.lockb"
+  "webpack.config.js" "rollup.config.js" "vite.config.js" "gulpfile.js" "Gruntfile.js" "esbuild.config.js"
+  ".eslintrc" ".eslintrc.js" ".eslintrc.json" ".prettierrc" ".prettierrc.json" ".stylelintrc"
+  ".gitignore" ".gitattributes" ".editorconfig" ".nvmrc" ".node-version"
+  "phpcs.xml" "phpcs.xml.dist" "phpunit.xml" "phpunit.xml.dist" "phpstan.neon" "phpstan.neon.dist"
+  "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "CODE_OF_CONDUCT.md" "SECURITY.md"
+  "Dockerfile" "docker-compose.yml" "docker-compose.yaml"
+  "Makefile" "Procfile"
+  # macOS / Windows / editor artifacts
+  ".DS_Store" "Thumbs.db" "desktop.ini"
+  # AI config files
+  ".cursorrules" "CLAUDE.md" "AGENTS.md" ".aider.conf.yml" ".continuerc.json"
 )
 for f in "${BAD_FILES[@]}"; do
   if [ -f "$PLUGIN_PATH/$f" ]; then
@@ -65,6 +76,21 @@ if [ "$SOURCE_MAPS" -gt 0 ]; then
   echo -e "${RED}✗ $SOURCE_MAPS source map files (.map) shipped — reveals unminified source${NC}"
   find "$PLUGIN_PATH" -name "*.map" -not -path "*/vendor/*" | head -3
   FAIL=1
+fi
+
+# 1c-b. Editor backup / scratch files
+BACKUPS=$(find "$PLUGIN_PATH" -type f \( -name "*.bak" -o -name "*.orig" -o -name "*.swp" -o -name "*.swo" -o -name "*~" \) 2>/dev/null | wc -l | tr -d ' ')
+if [ "$BACKUPS" -gt 0 ]; then
+  echo -e "${YELLOW}⚠ $BACKUPS editor backup files (.bak, .orig, .swp, ~) shipped${NC}"
+  WARN=1
+fi
+
+# 1c-c. GitHub Copilot / IDE cache nested in any dir (not just root)
+NESTED_AI=$(find "$PLUGIN_PATH" -type d \( -name "copilot-*" -o -name ".history" -o -name ".vscode-test" \) 2>/dev/null | head -5)
+if [ -n "$NESTED_AI" ]; then
+  echo -e "${YELLOW}⚠ AI/IDE cache dirs nested in plugin:${NC}"
+  echo "$NESTED_AI" | head -3
+  WARN=1
 fi
 
 # 1d. Zero-byte or suspiciously large files
@@ -157,6 +183,33 @@ for pattern in "${FORBIDDEN[@]}"; do
     FF_FAIL=1
   fi
 done
+
+# Code obfuscation beyond forbidden functions (plugin-check `code_obfuscation`)
+# Matches: long hex strings, chr()-chain encoding, variable-named-as-string constructions
+OBF_COUNT=0
+OBF_HITS=$(grep -rEn '\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}\\x[0-9a-fA-F]{2}' "$PLUGIN_PATH" --include="*.php" \
+  --exclude-dir=vendor --exclude-dir=node_modules 2>/dev/null | head -3 || true)
+if [ -n "$OBF_HITS" ]; then
+  echo -e "${RED}✗ Hex-encoded string sequences (common obfuscation signal):${NC}"
+  echo "$OBF_HITS" | head -2
+  FAIL=1; OBF_COUNT=$((OBF_COUNT+1))
+fi
+CHR_HITS=$(grep -rEn 'chr\([0-9]+\)\s*\.\s*chr\([0-9]+\)\s*\.\s*chr\([0-9]+\)' "$PLUGIN_PATH" --include="*.php" \
+  --exclude-dir=vendor --exclude-dir=node_modules 2>/dev/null | head -3 || true)
+if [ -n "$CHR_HITS" ]; then
+  echo -e "${RED}✗ chr() concatenation chains (string-building obfuscation):${NC}"
+  echo "$CHR_HITS" | head -2
+  FAIL=1; OBF_COUNT=$((OBF_COUNT+1))
+fi
+
+# ALLOW_UNFILTERED_UPLOADS — plugins that define this = security nightmare
+UNFILTERED=$(grep -rEn "define\s*\(\s*['\"]ALLOW_UNFILTERED_UPLOADS['\"]\s*,\s*true" "$PLUGIN_PATH" \
+  --include="*.php" --exclude-dir=vendor --exclude-dir=node_modules 2>/dev/null | head -3 || true)
+if [ -n "$UNFILTERED" ]; then
+  echo -e "${RED}✗ Plugin defines ALLOW_UNFILTERED_UPLOADS=true — bypasses WP's MIME allowlist${NC}"
+  echo "$UNFILTERED" | head -2
+  FAIL=1
+fi
 
 for pattern in "${WARN_PATTERNS[@]}"; do
   HITS=$(grep -rEn "(^|[^a-zA-Z_])$pattern" "$PLUGIN_PATH" --include="*.php" \

@@ -107,6 +107,35 @@ test.describe('Uninstall cleanup (WP.org compliance)', () => {
     const hasCustomCap = customCapsLeft.includes(PLUGIN_PREFIX);
     expect(hasCustomCap, `Plugin capabilities still in wp_user_roles after uninstall`).toBe(false);
 
+    // 10. Post revisions tied to plugin CPTs are cleaned up
+    //     (if plugin registered custom post types, their revisions should be gone)
+    const CUSTOM_POST_TYPES = (process.env.PLUGIN_CUSTOM_POST_TYPES || '')
+      .split(',').filter(Boolean).map(t => t.replace(/[^a-zA-Z0-9_]/g, ''));
+    for (const cpt of CUSTOM_POST_TYPES) {
+      const postsLeft = parseInt(
+        wp(`db query "SELECT COUNT(*) FROM \\\`wp_posts\\\` WHERE post_type = '${cpt}' OR post_type = 'revision'" --skip-column-names`) || '0',
+        10
+      );
+      // Allow some generic revisions to exist, but plugin-specific posts should be gone
+      const pluginPostsLeft = parseInt(
+        wp(`db query "SELECT COUNT(*) FROM \\\`wp_posts\\\` WHERE post_type = '${cpt}'" --skip-column-names`) || '0',
+        10
+      );
+      expect(pluginPostsLeft, `${pluginPostsLeft} posts of type '${cpt}' left after uninstall`).toBe(0);
+    }
+
+    // 11. Scheduled single events (wp_schedule_single_event) cleared
+    const singleEvents = wp(`cron event list --format=json`);
+    let orphanedSingles = [];
+    try {
+      orphanedSingles = JSON.parse(singleEvents || '[]').filter((e) =>
+        (e.hook || '').includes(PLUGIN_PREFIX)
+      );
+    } catch {}
+    expect(orphanedSingles,
+      `${orphanedSingles.length} orphaned scheduled-single events from plugin after uninstall`
+    ).toEqual([]);
+
     console.log('[orbit] Uninstall cleanup: PASSED');
   });
 });

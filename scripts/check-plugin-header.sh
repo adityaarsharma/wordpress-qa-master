@@ -24,7 +24,7 @@ echo ""
 FAIL=0
 WARN=0
 
-# Required
+# Required fields
 REQUIRED=(
   "Plugin Name"
   "Version"
@@ -33,6 +33,20 @@ REQUIRED=(
   "License"
   "Text Domain"
 )
+
+# Validate "Requires Plugins" header (WP 6.5+) — comma-separated WP.org slugs only
+REQUIRES_PLUGINS=$(grep -iE "^\s*\*?\s*Requires Plugins:" "$MAIN_FILE" | head -1 | sed -E 's/.*Requires Plugins:\s*//' | tr -d '\r' || true)
+if [ -n "$REQUIRES_PLUGINS" ]; then
+  # Must be comma-separated lowercase slugs, no .php suffixes, no URLs
+  if echo "$REQUIRES_PLUGINS" | grep -qE '[A-Z]'; then
+    echo -e "${RED}✗ Requires Plugins: '$REQUIRES_PLUGINS' — must be lowercase WP.org slugs${NC}"
+    FAIL=1
+  fi
+  if echo "$REQUIRES_PLUGINS" | grep -qE '\.php|http|/'; then
+    echo -e "${RED}✗ Requires Plugins: '$REQUIRES_PLUGINS' — use plugin SLUG only (e.g. 'woocommerce'), not plugin/plugin.php${NC}"
+    FAIL=1
+  fi
+fi
 for field in "${REQUIRED[@]}"; do
   if ! grep -qE "^\s*\*?\s*${field}:" "$MAIN_FILE"; then
     echo -e "${RED}✗ Missing header: ${field}:${NC}"

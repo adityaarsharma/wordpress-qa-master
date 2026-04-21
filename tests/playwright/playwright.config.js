@@ -275,6 +275,17 @@ module.exports = defineConfig({
       testMatch: '**/flows/visual-regression-release.spec.js',
       dependencies: ['setup'],
     },
+
+    // ── Per-page plugin bundle size enforcement (plugin-check parity) ──
+    {
+      name: 'bundle-size',
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: AUTH_FILE,
+      },
+      testMatch: '**/flows/bundle-size.spec.js',
+      dependencies: ['setup'],
+    },
   ],
 
   // WP Playground server for CI

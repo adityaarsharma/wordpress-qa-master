@@ -126,33 +126,36 @@ Orbit never hardcodes a plugin slug, brand, or path. Every script takes `<plugin
 
 | Category | Checks | Status |
 |---|---|---|
-| Static analysis | 4 (lint, PHPCS, PHPStan, zip-hygiene) | ✅ shipped |
-| Release gate | 6 (header, readme.txt, version parity, license, block.json, HPOS) | ✅ shipped |
-| Functional E2E | 14 Playwright specs | ✅ shipped |
-| Security | 17 vuln patterns in `/orbit-wp-security` | ✅ shipped |
-| Performance | Lighthouse + DB profile + memory + object cache | ✅ shipped |
+| Static analysis | 5 (lint, PHPCS, PHPStan, zip-hygiene, **PHP 8.0-8.5 compat**) | ✅ shipped |
+| Release gate | 9 (header, readme.txt, version parity, license, block.json, HPOS, **WP function compat, modern WP, Requires Plugins**) | ✅ shipped |
+| Functional E2E | 15 Playwright specs (+ **bundle-size** per page) | ✅ shipped |
+| Security | **22** vuln patterns in `/orbit-wp-security` (incl. April 2026 supply-chain attack patterns) | ✅ shipped |
+| Performance | Lighthouse + DB profile + memory + object cache + **script loading strategy + Script Modules dynamic deps** | ✅ shipped |
 | Accessibility | axe + keyboard + colors + RTL | ✅ shipped |
 | PM / PA | User journey + FTUE + analytics + empty/error/loading states | ✅ shipped |
+| Modern WP (6.5–7.0) | Script Modules, Interactivity API, Block Bindings, Site Health, Plugin Dependencies, plugin-updater detection, external menu links | ✅ shipped |
 | Auto-scaffolding | `scaffold-tests.sh` reads plugin + generates config + scenarios + specs | ✅ shipped |
 | CI | GitHub Actions, pre-commit hook, dry-run preflight | ✅ shipped |
 | Reporting | Master HTML index + UAT HTML + skill audit HTML | ✅ shipped |
+| **Evergreen security log** | Living attack-pattern catalog at `docs/21-evergreen-security.md`, 90-day cadence | ✅ shipped |
 
 ### Ongoing research (what we're watching)
 
-These are areas where the WordPress landscape moves faster than our test coverage. We re-check them every 90 days.
+Security is evergreen — Orbit maintains [docs/21-evergreen-security.md](docs/21-evergreen-security.md)
+as a live attack-pattern log. Updated quarterly (next pass: July 2026).
 
-1. **WP 7.0 Abilities + Connectors API** — just launched March 2026, our `wp7-connectors.spec.js` probes the real `WP_Ability` class but the API may evolve. Re-verify once.wordpress.org publishes plugin examples.
-2. **HPOS migration patterns** — WooCommerce 8.2+ mandate. Watch for new incompatible patterns beyond `get_post_meta($order_id)`.
-3. **Interactivity API** — WP 6.5+ pattern for interactive blocks. Static adoption check missing.
-4. **WP 6.9 list table changes** — `manage_posts_extra_tablenav` semantics changed; plugins break silently. Covered by `empty-states.spec.js` but monitor for more WP 7.x list table refactors.
-5. **Patchstack quarterly reports** — 2025 top 5 vuln classes: XSS 34.7%, CSRF 19%, LFI 12.6%, Broken Access Control 10.9%, SQLi 7.2%. Re-check when 2026 data drops.
-6. **WP.org plugin-check tool** — their canonical check list evolves. Keep `gauntlet.sh` Step 2b in sync.
-7. **Site Health test registration** — plugins should register `site_status_tests` filter. Not yet in our skill.
-8. **Application Passwords UX** — WP 5.6 feature, coverage in `app-passwords.spec.js`. Verify when 2FA becomes mandatory in WP core.
-9. **Privacy API beyond exporters/erasers** — `wp_add_privacy_policy_content` not yet asserted.
-10. **Block metadata bulk registration** — WP 6.7 `wp_register_block_metadata_collection` perf pattern, not yet checked.
+**Areas under active watch (as of April 2026):**
 
-Maintain this list. When a gap closes, move it to "shipped". When the landscape opens a new one, add it here with date + source.
+1. **WP 7.0 Abilities + Connectors API** — launched March 2026. Our `wp7-connectors.spec.js` probes `WP_Ability` class + `abilities_api_init` + `wp_execute_ability`. `/orbit-wp-security` pattern #18 defends against the April 2026 EssentialPlugin attack vector.
+2. **PHP 8.4 / 8.5 deprecations** — implicit nullable types, dynamic properties, E_STRICT removed. Covered by `check-php-compat.sh` (April 2026).
+3. **WP 6.9 list table `manage_posts_extra_tablenav`** — plugins hooking this break silently when the list is empty. Empty-state spec covers general case; dedicated spec pending.
+4. **Patchstack quarterly reports** — 2025 top 5 vuln classes: XSS 34.7%, CSRF 19%, LFI 12.6%, Broken Access Control 10.9%, SQLi 7.2%. 2026 mid-year report expected July.
+5. **WP.org plugin-check tool** — canonical rule list at [github.com/WordPress/plugin-check](https://github.com/WordPress/plugin-check/blob/trunk/docs/checks.md). Re-sync `gauntlet.sh` Step 2b + our own checks quarterly.
+6. **AI-generated code hallucinations** — `/vibe-code-auditor` ships. New LLM versions introduce new hallucination patterns; monitor.
+7. **Script Modules cross-plugin pollution** — WP 6.5+ shared module registry, collision surface.
+8. **Plugin ownership transfer backdoors** — EssentialPlugin April 2026 attack pattern. Static detection for the 3 signature patterns ships in `/orbit-wp-security`. Ownership-transfer detection at registry level is out of scope.
+
+See `docs/21-evergreen-security.md` for the full SHIPPED / RESEARCHING / WATCHING log.
 
 ---
 

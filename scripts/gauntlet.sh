@@ -130,6 +130,27 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "release" ]; then
   else
     log "- ✗ HPOS declaration missing"; ((FAIL++))
   fi
+
+  # WordPress function compatibility vs declared min WP
+  if bash scripts/check-wp-compat.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ WP function compatibility"; ((PASS++))
+  else
+    log "- ✗ WP function compatibility (plugin uses newer WP functions than declared)"; ((FAIL++))
+  fi
+
+  # PHP compatibility (through PHP 8.5) vs declared min PHP
+  if bash scripts/check-php-compat.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ PHP 8.x compatibility"; ((PASS++))
+  else
+    log "- ✗ PHP compatibility issues"; ((FAIL++))
+  fi
+
+  # Modern WP features (Script Modules, Interactivity API, Plugin Dependencies, etc.)
+  if bash scripts/check-modern-wp.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ Modern WP features"; ((PASS++))
+  else
+    log "- ⚠ Modern WP: warnings"; ((WARN++))
+  fi
 fi
 
 # ── STEP 1b: ZIP HYGIENE + SUPPLY CHAIN + FORBIDDEN FUNCTIONS ────────────────
