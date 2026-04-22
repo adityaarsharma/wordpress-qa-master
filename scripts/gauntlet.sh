@@ -193,6 +193,34 @@ if [ "$MODE" = "full" ] || [ "$MODE" = "release" ]; then
   else
     log "- ⚠ Live CVE correlation: matching patterns found"; ((WARN++))
   fi
+
+  # WP.org detailed guidelines (18 numbered rules)
+  if bash scripts/check-wp-org-guidelines.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ WP.org guidelines"; ((PASS++))
+  else
+    log "- ✗ WP.org guidelines: submission would be rejected"; ((FAIL++))
+  fi
+
+  # POT file verification (not just generation — checks shipped file)
+  if bash scripts/check-pot-file.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ POT file"; ((PASS++))
+  else
+    log "- ⚠ POT file missing or out-of-sync"; ((WARN++))
+  fi
+
+  # RTL readiness static check (complements rtl-layout.spec.js runtime test)
+  if bash scripts/check-rtl-readiness.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ RTL readiness"; ((PASS++))
+  else
+    log "- ⚠ RTL readiness: missing rtl.css / is_rtl usage / Domain Path"; ((WARN++))
+  fi
+
+  # Generate design.md (architecture snapshot for release docs)
+  if bash scripts/generate-design-md.sh "$PLUGIN_PATH" 2>&1; then
+    log "- ✓ design.md generated at $PLUGIN_PATH/design.md"; ((PASS++))
+  else
+    log "- ⚠ design.md generation skipped"; ((WARN++))
+  fi
 fi
 
 # ── STEP 1b: ZIP HYGIENE + SUPPLY CHAIN + FORBIDDEN FUNCTIONS ────────────────

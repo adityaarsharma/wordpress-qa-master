@@ -1,0 +1,17 @@
+{
+  "core": "WordPress/WordPress#trunk",
+  "phpVersion": "8.3",
+  "config": {
+    "WP_DEBUG": true,
+    "WP_DEBUG_LOG": true,
+    "WP_DEBUG_DISPLAY": false,
+    "SCRIPT_DEBUG": true,
+    "WP_ENVIRONMENT_TYPE": "staging"
+  },
+  "port": 8881,
+  "testsPort": 8889,
+  "lifecycleScripts": {
+    "afterStart": "npx wp-env run cli wp --info 2>&1 | head -5; echo '---'; npx wp-env run cli wp core version"
+  },
+  "_note": "Runs your plugin against the latest WordPress RC / trunk build. Use BEFORE a new WP stable release ships, so you know if your plugin breaks on the upcoming version. Symlink this as .wp-env.json then: npx wp-env start"
+}
