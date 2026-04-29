@@ -1,189 +1,143 @@
-# Orbit — The Evergreen Pattern
+# Orbit — The Runtime-Evergreen Pattern
 
-> Every Orbit skill is **research-backed and ever-evolving** — not a frozen rulebook.
-> Each skill links to canonical sources, instructs Claude to fetch the latest before
-> auditing, and documents *why* the rules exist (whitepaper intent), not just *what*.
+> Skills are not snapshots. **Every Orbit skill fetches its canonical sources at runtime, derives current rules from today's docs, applies them to the user's plugin, and cites the live URL + fetch timestamp in every finding.** The skill is dynamic by design. No quarterly maintenance. No "update the skill" chore.
 
 ---
 
-## Why this matters
+## Why this exists
 
-The WordPress / WP plugin ecosystem moves fast:
-- Core APIs are added (Interactivity API, Block Bindings, theme.json schema 3) every 2-3 releases
-- Best practices shift (apiVersion 1 → 2 → 3 in 18 months)
-- Security patterns evolve (April 2026 ownership-transfer attack changed everyone's threat model)
-- Browser engines deprecate features (third-party cookies, sync XHR, etc.)
-- New competitors ship that change the bar (RankMath's onboarding wizard reset what "good" means)
+A skill that hardcodes "WP supports apiVersion 3" is a time bomb. True today, wrong tomorrow when WP 7.0 ships apiVersion 4. The user shouldn't have to remember to update their tooling — the tooling should keep itself current by reading the source-of-truth on every run.
 
-A skill that hardcodes "WP supports X feature" goes stale fast. Orbit avoids this with **the evergreen pattern**: every skill says "fetch the canonical doc on every audit, then apply the rules below as a starting point — but trust the source over the rules."
+So: every Orbit skill, when invoked, **starts by fetching live**.
 
 ---
 
-## The pattern
+## The runtime-evergreen contract
 
-Every Orbit skill must include a **`Sources & Evergreen References`** section near the bottom:
+Every Orbit `SKILL.md` MUST include — near the top, before any embedded rules — a section like this:
 
 ```markdown
-## Sources & Evergreen References
+## Runtime — fetch live before auditing (DO THIS FIRST)
 
-> **Always pull these before auditing** — patterns evolve, hardcoded rules go stale.
+When this skill is invoked, before applying any rules below:
 
-### Canonical docs (fetch on every run)
-- [WP Plugin Handbook — Block API](https://developer.wordpress.org/block-editor/reference-guides/block-api/)
-  → Re-check every 90 days OR after a WP minor release
-- [block.json metadata schema](https://schemas.wp.org/trunk/block.json)
-  → JSON Schema — fetch + validate against this exact URL
-- [Block API: apiVersion](https://developer.wordpress.org/block-editor/reference-guides/block-api/block-api-versions/)
-  → Migrate apiVersion when this doc bumps the recommended version
+1. **Fetch in parallel** (these URLs are source-of-truth — the rules below are
+   only a fallback if fetch fails):
+   - https://elementor.com/pro/changelog/  → extract latest version + last 2 minors' breaking changes
+   - https://developers.elementor.com/docs/deprecations/ → current deprecation list
+   - https://github.com/elementor/elementor/releases → latest tag
 
-### Live data feeds (used by this skill)
-- [WP CVE feed (NVD)](https://nvd.nist.gov/feeds/json/cve/) — JSON, pulled on every audit
-- [WPScan public feed](https://wpscan.com/wordpresses) — community-reported
+2. **Synthesize current state** from the fetched content:
+   - "What is the current major Elementor version as of <today>?"
+   - "What APIs were deprecated in the last 2 minor releases?"
+   - "What patterns does the migration guide recommend RIGHT NOW?"
 
-### Rule lineage
-- Rule #4 (apiVersion 3 required for `viewScriptModule`) — **WP 6.5 release notes**, March 2024
-- Rule #7 (Block Bindings replaces custom render filters) — **WP 6.5 introduced**, deprecated old approach in 6.6
+3. **Audit the user's plugin** against the synthesized current rules — not against
+   the fallback rules in this file.
 
-### Last reviewed
-- 2026-04-29 — by Aditya Sharma
-- Re-review trigger: any of (WP minor release · WPCS minor release · 90-day rolling window)
-- Open issue if you spot a stale rule: [github.com/adityaarsharma/orbit/issues](https://github.com/adityaarsharma/orbit/issues)
+4. **Cite, in every finding**: source URL + fetched-on date.
+   Example: `Per elementor.com/pro/changelog/ (fetched 2026-04-30): foo() deprecated in 3.22.`
+
+## Embedded fallback rules (used only if WebFetch fails)
+[the older static rules — kept as offline fallback only]
 ```
 
----
-
-## How a skill behaves at runtime (the evergreen behaviour)
-
-When `/orbit-X` is invoked, the skill should — in this order:
-
-1. **Fetch canonical docs** via WebFetch (or the user's prior-fetched cache, if recent).
-2. **Diff** the doc's "current best practice" against the skill's hardcoded rules.
-3. **If the doc has new guidance** the skill doesn't know about → flag it in output as `🆕 NEW PATTERN — added since rule was written. Verify and update the skill if confirmed.`
-4. **Apply the rules**, prioritising the canonical doc when conflict exists.
-5. **Cite the source** in every finding — e.g. `Per WP Plugin Handbook (fetched 2026-04-29): use sanitize_text_field for general string input.`
-
-This means findings are always **dated** and **traceable**. A reader sees "rule from doc fetched today" — not "rule someone hardcoded 18 months ago and forgot."
+That section is **executable instructions for Claude**, not documentation. When the skill runs, Claude reads SKILL.md → sees "fetch these first" → does it → uses the live data.
 
 ---
 
-## What every skill links to (universal sources)
+## What this changes in practice
 
-These are baseline sources every WP-focused Orbit skill should reference:
+| | v2.6 (snapshot) | v2.7 (runtime-evergreen) |
+|---|---|---|
+| `/orbit-elementor-compat` | "Test 3.18 / 3.20 / 3.22 / latest" (hardcoded) | Fetches Elementor changelog → tests against whatever the latest 3 minors are TODAY |
+| `/orbit-host-kinsta` | "Banned plugins as of April 2026" (snapshot) | Fetches Kinsta's banned-plugins page on every run |
+| `/orbit-cve-check` | Pulls NVD weekly via cron (manual) | Pulls NVD + Patchstack + WPScan on every invocation |
+| `/orbit-pay-stripe` | "Use PaymentIntents API" (today's recommendation) | Fetches Stripe API ref → uses whatever Stripe currently recommends |
+| `/orbit-block-bindings` | "apiVersion 3 is current" | Fetches Block API Versions doc → reflects today's current |
+| `/orbit-plugin-check` | "Plugin Check 1.9 (March 2026)" | Fetches WP.org repo → uses whatever's latest |
 
-| Source | Purpose |
-|---|---|
-| [WP Plugin Handbook](https://developer.wordpress.org/plugins/) | Canonical "how to write a WP plugin" |
-| [WP Block Editor Handbook](https://developer.wordpress.org/block-editor/) | Gutenberg / block-editor docs |
-| [WP Theme Handbook](https://developer.wordpress.org/themes/) | Theme + FSE docs |
-| [WP REST API Handbook](https://developer.wordpress.org/rest-api/) | REST endpoint authoring |
-| [WP Coding Standards (WPCS)](https://github.com/WordPress/WordPress-Coding-Standards) | PHPCS sniff source-of-truth |
-| [WP VIP Coding Standards](https://github.com/Automattic/VIP-Coding-Standards) | Enterprise sniffs |
-| [Make WP Core](https://make.wordpress.org/core/) | New API announcements, deprecations |
-| [WP CLI Handbook](https://developer.wordpress.org/cli/) | CLI command reference |
-| [WP-Env](https://github.com/WordPress/gutenberg/tree/trunk/packages/env) | Test environment |
-| [Plugin Check tool](https://github.com/WordPress/plugin-check) | Official submission checks |
-
-For non-WP sources (browser, language, security):
-
-| Source | Purpose |
-|---|---|
-| [MDN Web Docs](https://developer.mozilla.org/) | HTML / CSS / JS canonical |
-| [WCAG 2.2 Quick Reference](https://www.w3.org/WAI/WCAG22/quickref/) | A11y standard |
-| [PHP.net manual](https://www.php.net/manual/) | PHP language reference |
-| [PHPStan docs](https://phpstan.org/) | Static analysis rules |
-| [Playwright docs](https://playwright.dev/) | E2E testing |
-| [Lighthouse docs](https://developer.chrome.com/docs/lighthouse/) | Perf scoring |
-| [OWASP Top 10](https://owasp.org/www-project-top-ten/) | Security baseline |
-| [Patchstack threat feed](https://patchstack.com/database/) | WP-specific CVEs |
-| [NVD (NIST)](https://nvd.nist.gov/) | Government CVE feed |
-
-For framework-specific (Elementor, Woo, ACF, etc.):
-
-| Source | Purpose |
-|---|---|
-| [Elementor Developers](https://developers.elementor.com/) | Widget / control / skin dev |
-| [WooCommerce Developer Resources](https://developer.woocommerce.com/) | WC hooks, HPOS, templates |
-| [ACF Documentation](https://www.advancedcustomfields.com/resources/) | ACF integration |
-| [Yoast Developer Docs](https://developer.yoast.com/) | Yoast filters / hooks |
-| [WPML Documentation](https://wpml.org/documentation/) | WPML compat |
-| [Polylang Documentation](https://polylang.pro/doc/) | Polylang compat |
-| [Stripe API Reference](https://docs.stripe.com/api) | Stripe SDK |
-| [PayPal Developer](https://developer.paypal.com/) | PayPal SDK |
+**Net:** the same SKILL.md works for Elementor V5 when it ships, WP 7.5 when it ships, Stripe API v2027 when it ships — without any human editing the skill.
 
 ---
 
-## Whitepaper-intent: every skill explains *why*
+## Performance + caching
 
-A rule without a reason is dead weight. Every Orbit skill rule should have a **whitepaper intent** — one sentence explaining the underlying principle, and a citation back to the source.
+WebFetch caches for 15 minutes. So a `/orbit-do-it` run that invokes 12 skills doesn't fire 12 × 5 fetches — it fires the unique URLs once and reuses. Total overhead: ~10-30 sec on cold cache, sub-second after.
 
-Example (from `/orbit-wp-security`):
+For batch jobs (CI, weekly cron), wrap the run with a `WEB_CACHE_TTL=3600` to extend the cache to an hour.
+
+---
+
+## Offline / fallback mode
+
+If WebFetch fails (no internet, source 404, rate-limited):
+
+1. Skill emits a clear notice: `⚠ Live source fetch failed — using embedded fallback rules. Findings may reflect stale guidance.`
+2. Falls back to the static rules in `## Embedded fallback rules`.
+3. Suggests retry when network is available.
+
+Skills NEVER refuse to run because of fetch failure — degraded mode is acceptable, silent failure is not.
+
+---
+
+## Smoke test (per skill)
+
+Every skill should ship with a smoke-test reference — a known-input → known-output example documented in the SKILL.md, so reviewers can verify the skill produces sensible output.
 
 ```markdown
-### Rule: All AJAX handlers must verify a nonce
+## Smoke test
 
-**Whitepaper intent:** Without nonce verification, a logged-in user can be tricked
-into making state-changing requests via a malicious site they happen to visit
-(CSRF). This is OWASP Top 10 #1 historically and remains the most common WP
-plugin vulnerability class on Patchstack's 2025 quarterly reports.
-
-**Source:** [WP Plugin Handbook — Nonces](https://developer.wordpress.org/plugins/security/nonces/) · [OWASP CSRF](https://owasp.org/www-community/attacks/csrf)
-**Last reviewed:** 2026-04-29
+Input: a vanilla "Hello Dolly" plugin (~/test-plugins/hello-dolly/).
+Expected output:
+  - 0 Critical findings
+  - 1 Medium ("Plugin Header missing 'Requires PHP'")
+  - Cites <fetched-source> + today's date
 ```
 
-This pattern means a junior developer reading the audit understands not just "fix this" but "why this exists in the first place."
+This is the "eval / reference" the user asked for. When you change a skill, run it against the smoke-test input — if the output drifts unexpectedly, you've broken something.
+
+`/orbit-skill-improver --check-smoke` runs every skill against its smoke-test input (when one exists) and flags regressions.
 
 ---
 
-## How to keep a skill evergreen
+## Aligning with WordPress/agent-skills
 
-1. **Re-fetch the linked sources every 90 days** (or after a WP minor release).
-2. **Diff** what changed in the doc.
-3. **Update the rules** in the SKILL.md if the doc shifted.
-4. **Bump `Last reviewed`** date.
-5. **Open a PR** — never silent edits. Audit trail matters.
+WordPress core ships its own AI agent skills via `npx openskills install WordPress/agent-skills` (Jan 2026, [announcement](https://wordpress.org/news/2026/01/new-ai-agent-skill/)). Orbit **wraps**, doesn't reimplement:
 
-Or use:
-```
-/orbit-evergreen-update
-```
+- `install.sh` chains `npx openskills install WordPress/agent-skills` after symlinking Orbit's own skills
+- `/orbit-wp-playground` is a thin doc-only skill that points at WP's `wp-playground` for the AI feedback loop
+- Orbit's skills focus on QA / UAT / audit; WP's skills focus on agent-runtime primitives. They compose.
 
-The meta-skill that walks every orbit-* skill, fetches its linked sources, flags anything that's drifted, and (with confirmation) updates the rules.
+When WP core ships more agent skills, Orbit picks them up automatically via the same `npx openskills install` chain — no Orbit code change needed.
 
 ---
 
-## What makes this different from "just docs"
+## How a skill becomes truly evergreen — checklist
 
-Static documentation rots. A skill that says "Use `apiVersion: 2`" is a time bomb — true in 2023, wrong in 2024.
+For every skill, verify:
 
-Orbit's evergreen pattern means:
-- **Every audit cites the source on the day it ran** — output is traceable
-- **Sources are URLs, not hardcoded text** — editing the source updates the skill
-- **`Last reviewed` is visible** — readers know if a skill is stale
-- **`/orbit-evergreen-update`** can scan all skills and flag drift
+- [ ] Has a `## Runtime — fetch live before auditing` section near the top
+- [ ] Lists 2-5 canonical URLs as the live source of truth
+- [ ] Says "fetch first, derive rules from fetched content"
+- [ ] Cites fetched URL + date in finding output
+- [ ] Has `## Embedded fallback rules` for offline mode
+- [ ] Has a `## Smoke test` reference
+- [ ] Has `## Sources & Evergreen References` (the documentation list, kept for reference)
 
-The rules in any SKILL.md are a *starting point*. The canonical doc is always source-of-truth.
+`/orbit-skill-improver` (rewrite of the old `/orbit-evergreen-update`) walks every skill and adds missing sections. Run quarterly OR after every WP minor release OR whenever the user types `/orbit-skill-improver --apply`.
 
 ---
 
-## Adding evergreen sections to existing skills
+## When to break the pattern
 
-When auditing the existing 45 skills, each gets:
-
-1. A `Sources & Evergreen References` section near the bottom
-2. Whitepaper-intent paragraphs on the most opinionated rules
-3. A `Last reviewed` timestamp
-
-Use `/orbit-evergreen-update` (the meta-skill) to do this automatically. It:
-- Reads each SKILL.md
-- Adds the missing sections from a template
-- Pulls the right canonical sources based on the skill's domain
-- Sets `Last reviewed` to today
-- Opens a PR with the additions
+Some skills don't have an external canonical source — purely internal patterns (e.g., `/orbit-pre-commit`, `/orbit-multi-plugin`, `/orbit-reports`). Those skills can omit the `Runtime — fetch live` section and rely on embedded rules only. But they're a small minority — most skills (~80 of 116) have a canonical source on the open web, so they MUST be runtime-evergreen.
 
 ---
 
 ## Built by
 
-[Aditya Sharma](https://adityaarsharma.com) · POSIMYTH Innovation · github.com/adityaarsharma/orbit
+[Aditya Sharma](https://adityaarsharma.com) · POSIMYTH Innovation
+github.com/adityaarsharma/orbit
 
-**Core philosophy:** Software-quality tooling should evolve with the software. Orbit's job isn't to ship rules from 2024 to 2030 — it's to know what 2030 looks like by re-reading the canonical sources every time it runs.
+**The discipline:** Software-quality tooling shouldn't freeze in the year it was written. It should know what *today* looks like by re-reading the canonical sources every time it runs.

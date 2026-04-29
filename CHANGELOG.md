@@ -8,6 +8,68 @@ All notable changes to Orbit follow [Keep a Changelog](https://keepachangelog.co
 
 ---
 
+## [2.7.0] — 2026-04-30 — "Runtime-Evergreen + Brainless Agent"
+
+The big conceptual shift: skills are no longer snapshots. Every skill is **runtime-evergreen** — when invoked, it fetches its canonical sources via WebFetch FIRST, derives current rules from today's docs, applies them to the user's plugin, and cites the live URL + fetch timestamp in every finding. No more "manually update the skill quarterly." Same `/orbit-elementor-compat` SKILL.md handles Elementor V4 today, V5 when it ships, V6 when that ships — because the rule-source is the live changelog, not embedded text.
+
+Plus the brainless team agent the user asked for: `/orbit-do-it <plugin-path>` orchestrates everything; `/orbit-uat-agent` runs Stagehand-style natural-language UAT (write tests in English, no selectors).
+
+### Added — 9 new skills
+
+- **`/orbit-do-it`** — brainless orchestrator. Auto-detects plugin type, assembles the right pipeline (core 6 audits + type-specific add-ons + UAT + live security feeds), runs in parallel, generates one-page TL;DR + master HTML report. Zero questions after the path. ~10-15 min.
+- **`/orbit-uat-agent`** — Stagehand-style natural-language UAT runner. Reads plugin code, infers user flows, generates English test plans, executes via AI-resolved selectors that survive UI changes. Self-heals on DOM drift.
+- **`/orbit-wp-playground`** — thin wrapper for WordPress core's official agent skills (`WordPress/agent-skills`, Brandon Payton, Jan 2026). Composes; doesn't reinvent.
+- **`/orbit-abilities-api`** — WP 7.0 Abilities API + AI Client API audit.
+- **`/orbit-rtc-compat`** — WP 7.0 Real-Time Collaboration compat. Classic meta-boxes block RTC.
+- **`/orbit-vdp`** — EU Cyber Resilience Act (2026) mandates VDP for every commercial WP plugin sold in EU.
+- **`/orbit-premium-audit`** — stricter audit for Pro plugins. Patchstack 2026: 76% of premium-component vulns exploitable.
+- **`/orbit-broken-access-control`** — OWASP A01 deep audit. Patchstack: BAC = 57% of all blocked WP attacks.
+- **`/orbit-skill-improver`** — action-mode meta-skill. Replaces read-only `/orbit-evergreen-update`. `--check`, `--apply`, `--pr` modes.
+
+### Changed — 6 skills rewritten with runtime-fetch pattern
+
+- **`/orbit-elementor-compat`** — fetches Elementor's changelog at runtime
+- **`/orbit-cve-check`** — fetches 5 security feeds on every invocation
+- **`/orbit-host-kinsta`** — fetches banned-plugins list + cache rules live
+- **`/orbit-host-wpengine`** — fetches disallowed list + EverCache rules live
+- **`/orbit-pay-stripe`** — fetches Stripe docs at runtime
+- **`/orbit-plugin-check`** — fetches latest plugin-check release; verifies user's version
+
+### Added — EVERGREEN.md rewritten
+
+Runtime-evergreen pattern is now the doc's main definition. Every skill must have `## Runtime — fetch live before auditing (DO THIS FIRST)` near the top with executable instructions.
+
+### Added — install.sh chains WordPress/agent-skills
+
+```bash
+npx openskills install WordPress/agent-skills
+npx openskills sync
+```
+
+Runs alongside Orbit's symlink step. User gets both Orbit's QA-focused skills + WP core's runtime / Playground primitives.
+
+### Removed
+
+- **`SKILL-ROADMAP.md`** — most candidates from v2.5/v2.6 shipped; remaining gaps tracked via GitHub issues + `/orbit-skill-add` for community contributions.
+
+### Migration from v2.6
+
+```bash
+bash ~/Claude/orbit/install.sh --update
+# Symlinks the 9 new skills + the 6 rewritten ones
+# Restart Claude Code (Cmd+Q + reopen)
+# Then: /orbit-skill-improver --check
+```
+
+The 6 rewritten skills demonstrate the pattern. Other skills retrofit via `/orbit-skill-improver --apply` over time.
+
+### Stats
+- 115 total skills (was 106 in v2.6)
+- WordPress/agent-skills installed alongside Orbit (composes, doesn't compete)
+- 6 fully runtime-evergreen demonstration skills; remaining retrofit via the meta-skill
+
+---
+
 ## [2.6.0] — 2026-04-29 — "Evergreen + Limitless"
 
 61 new skills (now **106 total**), each linked to live canonical sources so the suite stays current with the day's reality, not statically frozen. Plus a meta-skill (`/orbit-evergreen-update`) that walks every other skill, fetches the linked sources, flags drift.

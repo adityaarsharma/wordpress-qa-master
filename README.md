@@ -4,7 +4,9 @@
 
 ### **Complete UAT for WordPress Plugins**
 
-*A Claude Code plugin · **106 specialised `/orbit-*` skills** · Dev → QA → PM → Designer → End User · **evergreen** (every skill links to live canonical sources, never frozen)*
+*A Claude Code plugin · **115 runtime-evergreen `/orbit-*` skills** · Dev → QA → PM → Designer → End User · **fetches live canonical sources on every run** (skills are never snapshots)*
+
+**Brainless one-command audit:** `/orbit-do-it ~/plugins/my-plugin` — auto-detects plugin type, runs the right audit + UAT pipeline, opens report.
 
 **👉 [Get started in 60 seconds](#install-in-60-seconds) — one curl command + a wizard**
 
@@ -24,7 +26,15 @@
 
 ---
 
-**v2.6.0 · April 2026 · Evergreen + Limitless** — **106 specialised `/orbit-*` skills**, every one of them linked to live canonical sources (WP Plugin Handbook, Block Editor Handbook, MDN, OWASP, schema.org, Stripe / PayPal docs, etc.) and instructed to fetch them on every audit. Rules in any SKILL.md are a starting point; the canonical doc is always source-of-truth. Quarterly drift-checks via `/orbit-evergreen-update`. Categories: 11 audits, 8 Gutenberg / Block Editor dev, 6 Elementor dev, 5 UAT templates (Elementor / Gutenberg / Woo / Forms / Membership), 5 PM, 5 Designer, 5 QA, 7 Performance, 3 Security probing, 3 SEO, 5 Hosting compat (WPE / Kinsta / Cloudways / Shared / Pantheon), 5 Plugin compat (Yoast / RankMath / WPML / Polylang / ACF), 4 Payment SDKs (Stripe / PayPal / EDD / Freemius), 3 Lifecycle (activation / upgrade / rollback), and a meta-skill (`/orbit-skill-add`) that helps you generate more. See [EVERGREEN.md](EVERGREEN.md) for the whitepaper / philosophy.
+**v2.7.0 · April 2026 · Runtime-Evergreen + Brainless Agent** — **115 specialised `/orbit-*` skills**, each one **runtime-evergreen**: when invoked, the skill fetches its canonical sources (WP make blog, Elementor changelog, Stripe docs, NVD/Patchstack/WPScan feeds, etc.) and derives current rules from today's docs — not from a snapshot taken when the SKILL.md was written. Findings cite the live URL + fetch timestamp. The skills handle Elementor V4, V5 (when it ships), WP 7.0, WP 7.5 (when it ships) without anyone editing the SKILL.md.
+
+Plus **`/orbit-do-it`** — the brainless team agent. One command, walks away, comes back to a verdict.
+
+Plus **`/orbit-uat-agent`** — Stagehand-style natural-language UAT (no selectors, no specs to write).
+
+Plus **wraps `WordPress/agent-skills`** (WP core's official agent skills, Jan 2026) via the installer — `npx openskills install WordPress/agent-skills` runs alongside Orbit. Don't reinvent; compose.
+
+See [EVERGREEN.md](EVERGREEN.md) for the runtime-evergreen pattern + whitepaper philosophy.
 
 🎯 **[Use Cases](docs/24-use-cases.md)** (25 real scenarios · Dev/QA/PM/PA/Designer/Release-Ops) &nbsp;·&nbsp; 🧩 **[Extending Orbit](docs/23-extending-orbit.md)** (how to add checks, write specs, create skills)
 
@@ -114,8 +124,8 @@ It walks you through plugin path, type (Elementor / Gutenberg / SEO / WooCommerc
 | Other / Meta | 3 | `/orbit-pre-commit` `/orbit-skill-add` `/orbit-evergreen-update` |
 
 **👉 [Full skill reference with trigger phrases + descriptions](SKILLS.md)**
-**👉 [Evergreen pattern (whitepaper)](EVERGREEN.md)**
-**👉 [Roadmap of more candidate skills](SKILL-ROADMAP.md)**
+**👉 [Runtime-evergreen pattern (whitepaper)](EVERGREEN.md)**
+**👉 [How to add new skills](skills/orbit-skill-add/SKILL.md)** + **[How to keep skills current](skills/orbit-skill-improver/SKILL.md)**
 
 ---
 

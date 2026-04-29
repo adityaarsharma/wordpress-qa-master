@@ -131,6 +131,26 @@ for skill in "${DEPRECATED[@]}"; do
   fi
 done
 
+# ── WordPress/agent-skills (official WP core agent skills) ─────
+if [ $UPDATE_MODE -eq 0 ] && [ $SKILLS_ONLY -eq 0 ]; then
+  echo ""
+  echo "⏳ [3a] Installing WordPress/agent-skills (official WP core skills)..."
+  echo "   wp-playground gives AI agents a fast WP feedback loop."
+  echo "   Source: github.com/WordPress/agent-skills"
+  echo ""
+  if command -v npx >/dev/null 2>&1; then
+    npx -y openskills install WordPress/agent-skills 2>/dev/null && {
+      npx -y openskills sync 2>/dev/null || true
+      echo "   ✓ WordPress/agent-skills installed"
+    } || {
+      echo "   ⚠ Couldn't install WordPress/agent-skills (network or npm issue)."
+      echo "     Re-try later: npx openskills install WordPress/agent-skills"
+    }
+  else
+    echo "   ⚠ npx not found — install Node.js to use WordPress/agent-skills"
+  fi
+fi
+
 # ── Power tools (skipped on --update or --skills-only) ──────────
 if [ $UPDATE_MODE -eq 0 ] && [ $SKILLS_ONLY -eq 0 ]; then
   echo ""

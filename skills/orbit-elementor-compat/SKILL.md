@@ -1,105 +1,151 @@
 ---
 name: orbit-elementor-compat
-description: Test Elementor addon compatibility across Elementor versions (3.18 / 3.20 / 3.22 / latest) — deprecated APIs, removed hooks, breaking class signature changes. Auto-spins multiple wp-env sites, each pinned to a different Elementor version, runs the plugin's spec against each. Use when the user says "Elementor compat", "across Elementor versions", "Elementor 3.20 issue", "before Elementor major release".
+description: Across-Elementor-versions compatibility audit — fetches Elementor's current changelog + deprecation list at RUNTIME, then audits the plugin against today's reality. Auto-handles V3, V4 Atomic, V5+ as they ship — no manual rule update needed. Use when the user says "Elementor compat", "across versions", "after Elementor major release", "V4 atomic check", "deprecated Elementor APIs".
 ---
 
-# 🪐 orbit-elementor-compat — Across-Elementor-versions matrix
+# 🪐 orbit-elementor-compat — Runtime-evergreen Elementor compatibility
 
-Elementor ships breaking changes more often than WP core. An addon working on 3.18 can break on 3.22. This skill catches it before customers do.
+> The skill that auto-stays-current with Elementor's release cadence. No "V4 atomic" hardcoding — it fetches what's current at runtime.
 
 ---
 
-## Quick start
+## Runtime — fetch live before auditing (DO THIS FIRST)
+
+When this skill is invoked:
+
+1. **Fetch in parallel**:
+   - https://elementor.com/pro/changelog/ → latest version + last 5 releases' changes
+   - https://developers.elementor.com/docs/deprecations/ → current deprecation list
+   - https://github.com/elementor/elementor/releases → latest tag + release notes
+   - https://github.com/elementor/elementor/blob/main/CHANGELOG.md → free-version changelog
+   - https://developers.elementor.com/elementor-editor-4-0-developers-update/ → V3→V4 migration (still relevant during coexistence)
+
+2. **Synthesize current state**:
+   - "What is the current major Elementor version as of today?"
+   - "What APIs were deprecated in the last 2 minors? Last 6 months?"
+   - "What new APIs / patterns has Elementor introduced that the plugin should adopt?"
+   - "Has V4 become default for new sites yet (it did April 2026 per their announcement)?"
+   - "Which V3 widgets / V4 Atomic Elements are the latest equivalents?"
+
+3. **Audit the plugin** against the synthesized current rules.
+
+---
+
+## What gets checked (today's rule set, derived from today's fetch)
+
+### A. Use of currently-deprecated APIs
+Whatever the fetched deprecation list says. Examples (as of last fetch — may differ today):
+- `_register_controls()` → `register_controls()` (no underscore)
+- `widgets_registered` hook → `elementor/widgets/register`
+- `Element_Base::get_settings()` direct → `get_settings_for_display()`
+- Old `Stack` direct access → `Document` API
+
+If the fetched list shows new deprecations the embedded list doesn't have — audit catches them anyway, because we trust the fetched list.
+
+### B. Container layout adoption
+Elementor 3.6 introduced Containers. New addons should target Container; old addons should still support Section/Column for back-compat. Plugins still emitting Section markup post-3.6 (now ~4 years old) get flagged for "should support Container."
+
+### C. CSS variables vs hardcoded values
+Elementor 3.18+ uses CSS custom properties. Hardcoded `color: #333` doesn't respect user's theme.
+
+### D. V3 widget vs V4 Atomic Element
+**Per fetched V4 announcement:** From April 2026 forward, new sites default to V4 with both V3 widgets + V4 Atomic Elements available. Plugin extensions should:
+- Continue to ship V3 widgets (V3 sites still active)
+- Optionally also expose Atomic Element variants for V4 sites
+- Use the coexistence patterns documented in V4 dev update
+
+If your plugin ONLY ships V3 widgets, that's currently fine — no urgent migration. But for new development, ship both.
+
+### E. Editor V4 selectors / DOM
+V4's editor DOM differs from V3. Playwright tests targeting V3 admin selectors (`#elementor-panel-search-input`, etc.) need to be split into V3 + V4 spec sets.
+
+### F. Future versions (V5+ when they ship)
+The runtime-fetch design means when Elementor V5 ships, this skill picks up the new deprecations / patterns automatically. No "manually edit SKILL.md to add V5 rules" — the changelog IS the rule source.
+
+---
+
+## Multi-version test matrix
 
 ```bash
 PLUGIN_SLUG=my-plugin \
   bash ~/Claude/orbit/scripts/elementor-version-matrix.sh
 ```
 
-Default versions: 3.18.x, 3.20.x, 3.22.x, latest. Configurable in `qa.config.json`.
+Versions tested: latest 3 minors of Elementor + the version pinned in your `qa.config.json` (defaults to "latest 3 minors fetched from Elementor's repo today").
 
----
-
-## What it checks
-
-### 1. Deprecated API usage
-| Deprecated in | API | Replacement |
-|---|---|---|
-| 3.0 | `_register_controls()` (underscore prefix) | `register_controls()` |
-| 3.5 | `widgets_registered` hook | `elementor/widgets/register` |
-| 3.18 | `Element_Base::get_settings()` direct | `get_settings_for_display()` |
-| 3.20 | `\Elementor\Plugin::$instance->frontend->get_builder_content()` | `\Elementor\Plugin::$instance->frontend->get_builder_content_for_display()` |
-| 3.22 | `Stack` class direct access | use `Document` API |
-
-### 2. Hook signature changes
-**Whitepaper intent:** Elementor's `elementor/widgets/register` hook signature changed in 3.5 (from `widgets_registered` with no args). Plugins using the old shape silently fail to register.
-
-### 3. CSS variables vs hardcoded values
-Elementor 3.18+ uses CSS custom properties for theme colours / typography. Hardcoded `color: #333` doesn't respect theme styles set via the editor.
-
-```css
-/* ❌ */
-.my-widget { color: #333; }
-
-/* ✅ */
-.my-widget { color: var(--e-global-color-text); }
-```
-
-### 4. Container vs Section/Column
-Elementor 3.6 introduced Containers (Flexbox). Section/Column is now legacy. New addons should target Container; old addons should still support Section for back-compat.
-
-### 5. Data Layer changes (Editor V4)
-Elementor 4.x will rebuild the editor on Atomic. Addons should:
-- Avoid hardcoded DOM selectors targeting Editor V3 markup
-- Use the public Hooks API (`elementor/editor/init`, etc.) — those will be carried forward
-- Keep widget logic decoupled from Editor V3 internals
+Sites spun up in parallel (port 8881 / 8882 / 8883 ...), each running a different Elementor version. Plugin's smoke spec runs against each. Pass/fail matrix output.
 
 ---
 
 ## Output
 
 ```markdown
-# Elementor Compat Matrix — my-plugin
+# Elementor Compat — my-plugin · 2026-04-30
 
-## Test sites
-- Elementor 3.18.x on port 8881 ✓ pass
-- Elementor 3.20.x on port 8882 ✓ pass
-- Elementor 3.22.x on port 8883 ❌ FAIL — widget-x renders blank
-- Elementor latest  on port 8884 ⚠ console warnings (deprecated `_register_controls`)
+> Per elementor.com/pro/changelog (fetched 2026-04-30 14:32 UTC):
+> Current Elementor version: 3.30.x (Pro), 3.30.x (Free)
+> V4 Atomic became default for new sites: April 2026
+> Active deprecations in last 6 months: 4
 
-## Deprecated API usage
-- ❌ 12 widgets use `_register_controls` (underscore prefix) — deprecated since 3.1
-- ⚠ 3 widgets read `Element_Base::get_settings()` direct — switch to `get_settings_for_display()`
+## Test matrix
+- 3.28 — ✓ pass
+- 3.29 — ⚠ console warning ("get_settings() direct access — use get_settings_for_display")
+- 3.30 — ❌ fail — 1 widget renders blank
+- V4 Atomic (default new sites) — ⚠ Atomic Element equivalent not exposed
+
+## Deprecations matched in source
+- ❌ `_register_controls` (underscore prefix) — 12 widgets — deprecated 3.1
+- ❌ `widgets_registered` hook — 1 — deprecated 3.5
+- ⚠ `Element_Base::get_settings()` direct — 3 — deprecated 3.18
 
 ## CSS variables
 - ✓ 35 widgets use `var(--e-global-color-*)`
-- ⚠ 12 widgets hardcode colors — won't match user's theme palette
+- ⚠ 12 widgets hardcode colors
+
+## V3 / V4 split
+- 14 V3 widgets shipped
+- 0 V4 Atomic Element equivalents
+- Recommendation: V3 stays for back-compat; ship Atomic equivalents for new V4 sites
+
+## Severity: HIGH (3.30 fail + deprecations)
 ```
 
 ---
 
 ## Pair with
 
-- `/orbit-elementor-dev` — widget dev audit
+- `/orbit-elementor-dev` — code-side widget audit
+- `/orbit-elementor-controls` — control system
 - `/orbit-elementor-pro` — Pro extension specifics
-- `/orbit-compat-matrix` — PHP × WP matrix
+- `/orbit-uat-elementor` — end-to-end UAT
 - `/orbit-conflict-matrix` — vs other plugins
 
 ---
 
+## Smoke test
+
+Input: a plugin with 1 widget using `_register_controls` (underscore prefix).
+Expected:
+- 1 ❌ HIGH for deprecated underscore prefix
+- Cites the live fetched deprecations URL with today's date
+- Test matrix shows pass on 2 of 3 latest Elementor versions
+
+---
+
+## Embedded fallback rules (offline)
+- `_register_controls` underscore prefix deprecated since 3.1
+- `widgets_registered` hook deprecated since 3.5
+- Container layout (3.6+) preferred over Section/Column for new code
+- CSS variables (3.0+) preferred over hardcoded values
+
 ## Sources & Evergreen References
 
-### Canonical docs
-- [Elementor Developers](https://developers.elementor.com/) — root
-- [Changelog](https://wordpress.org/plugins/elementor/#developers) — every release breaking-change note
-- [Editor V4 announcement](https://elementor.com/blog/editor-v4/) — what's coming, what's deprecated
-- [Hooks Reference](https://developers.elementor.com/docs/hooks/) — public API
-
-### Rule lineage
-- Container layout — Elementor 3.6 (March 2022)
-- CSS variables global — Elementor 3.0 (June 2020)
-- `elementor/widgets/register` (modern hook) — Elementor 3.5
-- Deprecation cycles — Elementor typically gives 2 minor versions notice; some breakages are silent (audit shows them)
+### Live sources (fetched on every run)
+- [Elementor Pro changelog](https://elementor.com/pro/changelog/) — version + breaking changes
+- [Elementor Free changelog (GitHub)](https://github.com/elementor/elementor/blob/main/CHANGELOG.md)
+- [Deprecations](https://developers.elementor.com/docs/deprecations/) — actively maintained list
+- [GitHub Releases](https://github.com/elementor/elementor/releases) — latest tag
+- [V4 Developer Update](https://developers.elementor.com/elementor-editor-4-0-developers-update/) — coexistence patterns
 
 ### Last reviewed
-- 2026-04-29 — re-review on every Elementor minor release (active deprecation cycle)
+2026-04-30 — runtime-evergreen; auto-handles V4, V5, V6 when they ship

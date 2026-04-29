@@ -1,13 +1,18 @@
 # Orbit — Skills Reference
 
-> **106 specialised `/orbit-*` Claude Code skills** for WordPress plugin QA.
-> One master dispatcher + 105 deep-dive skills. Type `/orbit` to browse the menu.
+> **115 specialised `/orbit-*` Claude Code skills** for WordPress plugin QA.
+> Every skill is **runtime-evergreen** — fetches its canonical sources at runtime,
+> derives current rules from today's docs, and cites the live URL + fetch timestamp
+> in every finding. No quarterly maintenance. The skill stays current automatically.
+>
+> Type `/orbit-do-it <plugin-path>` for the brainless one-command audit.
+> Or `/orbit` for the master menu.
 
 **Repo:** https://github.com/adityaarsharma/orbit
 **Author:** [Aditya Sharma](https://github.com/adityaarsharma) · POSIMYTH Innovation
-**Whitepaper / evergreen pattern:** [EVERGREEN.md](EVERGREEN.md)
-**Roadmap (still more candidates):** [SKILL-ROADMAP.md](SKILL-ROADMAP.md)
+**Whitepaper / runtime-evergreen pattern:** [EVERGREEN.md](EVERGREEN.md)
 **How to add a new skill:** [skills/orbit-skill-add/SKILL.md](skills/orbit-skill-add/SKILL.md)
+**How to keep skills current:** [skills/orbit-skill-improver/SKILL.md](skills/orbit-skill-improver/SKILL.md)
 
 ---
 
@@ -33,13 +38,14 @@ Full pattern: [EVERGREEN.md](EVERGREEN.md).
 
 ## All 106 skills, by category
 
-### 🛠 Setup & Environment (5)
+### 🛠 Setup & Environment (6)
 | Skill | What it does |
 |---|---|
 | `/orbit-setup` | Guided onboarding wizard — installs everything, configures first plugin, runs first audit |
 | `/orbit-update` | Pull latest Orbit + refresh skill symlinks. Zero questions. |
 | `/orbit-install` | Power-tools installer (PHPCS, Playwright, Lighthouse, WP-CLI, etc.) |
 | `/orbit-docker-site` | wp-env / wp-now setup; troubleshooting |
+| `/orbit-wp-playground` | **Wraps WordPress/agent-skills (Brandon Payton's wp-playground; WP core official)** |
 | `/orbit-pre-commit` | Git pre-commit hook — blocks `var_dump`, `console.log DEBUG`, etc. (<10s) |
 
 ### 🏃 Pipeline (3)
@@ -49,12 +55,13 @@ Full pattern: [EVERGREEN.md](EVERGREEN.md).
 | `/orbit-release-gate` | Day-of-release sequence — preflight → metadata → gauntlet → evidence pack |
 | `/orbit-multi-plugin` | Batch-test multiple plugins in parallel |
 
-### 🌐 Master + Meta (3)
+### 🌐 Master + Meta (4)
 | Skill | What it does |
 |---|---|
 | `/orbit` | Master dispatcher — routes user intent to the right skill, role-based menu |
+| **`/orbit-do-it`** | **Brainless orchestrator — one command, audits everything, opens report** |
 | `/orbit-skill-add` | Generate new `/orbit-*` skills following the established pattern |
-| `/orbit-evergreen-update` | Walk every skill, fetch canonical sources, flag drift |
+| `/orbit-skill-improver` | Action-mode meta — fetches live sources, edits stale skills, opens PRs |
 
 ### 🔍 Code Audits — General (6)
 | Skill | What it does |
@@ -66,14 +73,17 @@ Full pattern: [EVERGREEN.md](EVERGREEN.md).
 | `/orbit-scaffold-tests` | Read code → 70+ business-logic test scenarios |
 | `/orbit-code-quality` | Dead code, complexity, **AI-hallucination radar** (Veracode 45% stat) |
 
-### 🔍 Code Audits — Specialised (5)
+### 🔍 Code Audits — Specialised (8) — **incl. v2.7 additions**
 | Skill | What it does |
 |---|---|
 | `/orbit-accessibility` | WCAG 2.2 AA on admin UI + frontend output |
 | `/orbit-i18n` | Translation strings, text domain, POT freshness, RTL |
 | `/orbit-pm-ux-audit` | Spell-check + guided UX score + label benchmark |
 | `/orbit-compat-matrix` | PHP 7.4 / 8.1 / 8.3 / 8.5 × WP 6.3 / 6.5 / latest matrix |
-| `/orbit-cve-check` | Live CVE feed + ownership-transfer detection |
+| `/orbit-cve-check` | **Runtime-evergreen — fetches NVD + Patchstack + WPScan + GitHub Advisory live** |
+| `/orbit-abilities-api` | **WP 7.0 Abilities API + AI Client API audit** |
+| `/orbit-rtc-compat` | **WP 7.0 Real-Time Collaboration compat — meta-box → register_post_meta** |
+| `/orbit-broken-access-control` | **OWASP A01 deep audit — Patchstack's 57% top attack class** |
 
 ### 🧱 Gutenberg / Block Editor Dev (8) — **NEW v2.6**
 | Skill | What it does |
@@ -105,9 +115,10 @@ Full pattern: [EVERGREEN.md](EVERGREEN.md).
 | `/orbit-user-flow` | Click depth + onboarding + analytics-event verification |
 | `/orbit-conflict-matrix` | Test against top 20 WP plugins one at a time |
 
-### 🧪 UAT Templates (5) — **NEW v2.6**
+### 🧪 UAT Templates (6) — incl. **v2.7 brainless agent**
 | Skill | What it does |
 |---|---|
+| **`/orbit-uat-agent`** | **Stagehand-style natural-language UAT — write tests in English, no selectors** |
 | `/orbit-uat-elementor` | Elementor addon UAT — drag → configure → save → frontend |
 | `/orbit-uat-gutenberg` | Block plugin UAT — uses `@wordpress/e2e-test-utils-playwright` |
 | `/orbit-uat-woo` | WooCommerce extension UAT — incl. HPOS + Block Checkout |
@@ -204,6 +215,12 @@ Full pattern: [EVERGREEN.md](EVERGREEN.md).
 | `/orbit-compat-wpml` | WPML — wpml-config.xml, string registration, language detection |
 | `/orbit-compat-polylang` | Polylang — pll_* functions, free + Pro features |
 | `/orbit-compat-acf` | ACF — get_field defensive use, ACF Blocks, JSON sync |
+
+### 🇪🇺 Compliance + Premium (2) — **NEW v2.7**
+| Skill | What it does |
+|---|---|
+| `/orbit-vdp` | EU Cyber Resilience Act mandate — VDP / SECURITY.md / security.txt / SLA |
+| `/orbit-premium-audit` | Stricter audit for Pro plugins — Patchstack found 76% premium vulns exploitable |
 
 ### 💳 Payment Integration (4) — **NEW v2.6**
 | Skill | What it does |

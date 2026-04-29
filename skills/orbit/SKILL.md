@@ -16,13 +16,21 @@ You are the **front door** to Orbit, a WordPress plugin QA framework with 30+ sp
 
 Match the user's request to one of these intent buckets. Be generous with synonyms.
 
+### One-command (the brainless path)
+| User says... | Dispatch to |
+|---|---|
+| "audit my plugin", "do everything", "is it shippable?", "just check it" | **`/orbit-do-it`** ← the brainless orchestrator |
+| "test my plugin without writing specs", "run UAT in English", "natural-language tests" | **`/orbit-uat-agent`** ← Stagehand-style |
+
 ### Setup / Environment
 | User says... | Dispatch to |
 |---|---|
-| "set up Orbit", "install Orbit", "first run", "init my plugin" | `/orbit-init` |
+| "set up Orbit", "install Orbit", "first run", "init my plugin" | `/orbit-setup` |
 | "create test site", "wp-env site", "Docker WordPress", "spin up WP" | `/orbit-docker-site` |
+| "wp-playground", "WordPress agent skill", "openskills" | `/orbit-wp-playground` |
 | "install power tools", "install everything", "PHP/Playwright/Lighthouse setup" | `/orbit-install` |
 | "pre-commit hook", "block bad commits", "git hook for QA" | `/orbit-pre-commit` |
+| "improve skills", "skill-improver", "update orbit's own skills" | `/orbit-skill-improver` |
 
 ### Run the pipeline
 | User says... | Dispatch to |
@@ -45,6 +53,11 @@ Match the user's request to one of these intent buckets. Be generous with synony
 | "PM UX", "spell check labels", "guided experience score" | `/orbit-pm-ux-audit` |
 | "PHP 7.4 vs 8.x", "WP 6.5 compat", "compatibility matrix" | `/orbit-compat-matrix` |
 | "CVE check", "ownership transfer", "WPScan", "live vulnerability feed" | `/orbit-cve-check` |
+| "Abilities API", "WP 7 AI", "register_ability" | `/orbit-abilities-api` |
+| "RTC", "real-time collaboration", "WP 7 collab", "meta box collab" | `/orbit-rtc-compat` |
+| "VDP", "vulnerability disclosure", "EU CRA", "security.txt" | `/orbit-vdp` |
+| "premium audit", "Pro plugin", "license-server hardening" | `/orbit-premium-audit` |
+| "broken access control", "IDOR", "privilege escalation", "OWASP A01" | `/orbit-broken-access-control` |
 
 ### Browser / Playwright
 | User says... | Dispatch to |

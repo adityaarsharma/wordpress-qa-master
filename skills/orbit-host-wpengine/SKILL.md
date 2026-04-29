@@ -1,112 +1,154 @@
 ---
 name: orbit-host-wpengine
-description: WP Engine compatibility audit — disallowed plugins list, file-system locks, mu-plugins enforcement, page cache (NGINX FastCGI), object cache (Memcached), staging-vs-production environment detection, EverCache. Use when the user says "WP Engine", "WPE", "managed WP", "before customer hosts on WP Engine".
+description: WP Engine compat audit — fetches WP Engine's CURRENT disallowed-plugins list + EverCache rules + filesystem restrictions AT RUNTIME. Auto-stays-current with WPE policy. Use when the user says "WP Engine", "WPE", "is my plugin WPE-compatible", "WPE banned plugins", or before a customer hosts on WP Engine.
 ---
 
-# 🪐 orbit-host-wpengine — WP Engine compat
+# 🪐 orbit-host-wpengine — Runtime-evergreen WP Engine compat
 
-WP Engine is the largest managed-WP host. Their environment has hard-coded restrictions plugins must respect.
+> WPE's disallowed-plugins list and EverCache rules update regularly. This skill fetches what's true today.
 
 ---
 
-## What this skill checks
+## Runtime — fetch live before auditing (DO THIS FIRST)
 
-### 1. Disallowed plugins list
-WP Engine bans certain plugins (caching plugins that conflict with EverCache, backup plugins that conflict with their snapshots, etc.). If your plugin tries to set up its own caching → flagged in WPE customer audits.
+When this skill is invoked:
 
-```
-Disallowed list (subset, current as of 2026-04):
-- Caching: W3 Total Cache, WP Super Cache, WP Rocket (uses EverCache instead)
-- Backup: BackupBuddy, BackUpWordPress (uses native snapshots)
+1. **Fetch in parallel**:
+   - https://wpengine.com/support/disallowed-plugins/ → CURRENT disallowed list
+   - https://wpengine.com/support/cache/ → EverCache rules + cookie patterns
+   - https://wpengine.com/developers/ → environment specs (PHP versions, file paths)
+   - https://wpengine.com/changelog/ → recent platform changes
+   - https://wpengine.com/support/git/ → Git push deploy patterns
+
+2. **Synthesize current state**:
+   - "Is my plugin (or any dep) on WPE's disallowed list right now?"
+   - "What cookie patterns bypass EverCache today?"
+   - "What's the current PHP / WP version range supported on WPE?"
+   - "Has WPE added any new restrictions / detection patterns?"
+
+3. **Audit the plugin** against today's rules.
+
+---
+
+## What gets checked
+
+### A. Disallowed-plugins match (the big one)
+WPE bans plugins that conflict with their stack. As of last fetch:
+- Caching: W3 Total Cache, WP Super Cache, WP Rocket (use EverCache)
+- Backup: BackupBuddy, BackUpWordPress (use native snapshots)
 - Hit counter: WP Postviews, etc.
+- Some security plugins that conflict with their built-in firewall
 
-Full list: https://wpengine.com/support/disallowed-plugins/
-```
+The fetched list grows; the skill matches the user's plugin + its bundled deps.
 
-### 2. File-system writes restricted
-WP Engine locks certain directories. Plugins writing to those break.
+### B. EverCache cookie rules
+**Whitepaper intent:** EverCache caches by URL. Cookies starting with `wp_*` or `wordpress_*` automatically bypass. Custom plugin cookies don't — they bust cache for everyone.
 
 ```php
-// ❌ Will fail silently on WPE
-file_put_contents( WP_CONTENT_DIR . '/cache/my-plugin/foo.txt', $data );
+// ❌
+setcookie( 'my_plugin_visitor_id', wp_generate_uuid4(), ... );
 
-// ✅ Use uploads dir (always writable)
+// ✅ Logged-in only
+if ( is_user_logged_in() ) setcookie( 'my_plugin_visitor_id', ... );
+```
+
+### C. Filesystem write restrictions
+WPE locks `wp-config.php` and certain root files. Plugins that try to write there silently fail.
+
+```php
+// ❌ Will fail silently
+file_put_contents( ABSPATH . 'wp-config.php', $patched );
+
+// ✅ Use uploads dir
 $uploads = wp_upload_dir();
 file_put_contents( $uploads['basedir'] . '/my-plugin/foo.txt', $data );
 ```
 
-### 3. Object cache (Memcached) awareness
-WPE provides Memcached. Use it via `wp_cache_*`:
+### D. Memcached available; use wp_cache_*
 ```php
 wp_cache_set( 'my_key', $value, 'my-plugin', HOUR_IN_SECONDS );
-$value = wp_cache_get( 'my_key', 'my-plugin' );
 ```
 
-### 4. Page cache (EverCache) busting cookies
-WPE's NGINX cache respects `wp_*` and `wordpress_*` cookies. Custom plugin cookies bust the cache for ALL visitors unless declared.
+### E. PHP / WP version constraints
+WPE's currently-supported PHP versions (per fetched docs). Customers are typically 1 minor behind PHP main. If your plugin requires PHP 8.4 today and WPE only ships 8.3 → customers can't run yours yet.
 
-**Whitepaper intent:** A `my_plugin_visitor_id` cookie set on every page kills the page-cache hit rate, dropping a site's frontend perf 80%+.
-
-```php
-// Customer needs to add to WPE's User Portal → Cache → Cache exclusion:
-//   Cookie: my_plugin_visitor_id (don't bust cache for this)
-
-// Or only set the cookie for logged-in users (cache isn't used for them anyway):
-if ( is_user_logged_in() ) setcookie( 'my_plugin_visitor_id', ... );
-```
-
-### 5. Environment detection
+### F. Detect WPE
 ```php
 if ( defined( 'WPE_APIKEY' ) || defined( 'IS_WPE' ) ) {
   // Running on WP Engine
 }
-
-// Detect staging vs production
-$env = wp_get_environment_type();  // 'production', 'staging', 'development'
 ```
 
-### 6. PHP / WP version constraints
-WPE typically supports:
-- PHP 7.4 / 8.0 / 8.1 / 8.2 / 8.3 (configurable per-environment)
-- Latest WP + 1 prior major
-
-If your plugin requires PHP 8.4+, customers on WPE can't use it yet (as of 2026).
-
-### 7. WP-CLI access (yes, available)
-WPE supports SSH gateway → WP-CLI. Plugins shipping CLI commands work fine.
+### G. Staging vs production
+```php
+$env = wp_get_environment_type();
+if ( $env === 'staging' ) { /* skip live-mode ... */ }
+```
 
 ---
 
 ## Output
 
 ```markdown
-# WP Engine Compat — my-plugin
+# WP Engine Compat — my-plugin · 2026-04-30
 
-✓ Plugin not on WPE disallowed list
-⚠ Writes to wp-content/cache/my-plugin/ — relocate to wp-uploads/
-✓ Uses wp_cache_set/get for Memcached
-❌ Sets `my_plugin_visitor_id` cookie on every visit — busts EverCache for all visitors
-   → Either restrict to logged-in users, or document for WPE customers
-✓ Detects WPE via IS_WPE constant
-✓ Compatible with PHP 7.4 → 8.3
+> Per wpengine.com/support/disallowed-plugins (fetched 2026-04-30 14:32 UTC):
+> Disallowed list as of today: 17 entries
+> Match: 0 ✓
+
+## EverCache cookie rules
+- ⚠ Plugin sets `my_plugin_visitor_id` on every visit — busts EverCache
+  → Per wpengine.com/support/cache (fetched today): only `wp_*` / `wordpress_*` cookies bypass
+  → Restrict to logged-in users OR document for WPE customers to add via User Portal
+
+## Filesystem
+- ✓ Plugin doesn't try to write wp-config.php or other locked paths
+
+## Memcached
+- ✓ Plugin uses wp_cache_set/get
+- ✓ Compatible with WPE's Memcached
+
+## PHP versions
+- WPE supports: 7.4, 8.0, 8.1, 8.2, 8.3 (per fetched docs)
+- Plugin's Requires PHP: 7.4 ✓ (compatible with all)
+
+## Severity: MEDIUM (cookie issue only)
 ```
 
 ---
 
 ## Pair with
 
-- `/orbit-cache-compat` — broader cache compat (WPE EverCache + others)
-- `/orbit-host-kinsta` — similar managed-host concerns
+- `/orbit-host-kinsta` / `-cloudways` / `-pantheon` — peer hosts
+- `/orbit-cache-compat` — broader cache strategy
 
 ---
 
+## Smoke test
+
+Input: a plugin with no special host requirements.
+Expected:
+- 0 disallowed-plugin matches
+- ✓ on cookie / filesystem / Memcached patterns
+- Cites wpengine.com docs with today's fetch timestamp
+
+---
+
+## Embedded fallback rules (offline)
+- Disallowed-plugin overlap → flag
+- Custom cookies on every page → cache buster
+- wp-config.php writes → fail silently on WPE
+- Use wp_cache_* for Memcached
+- Detect via IS_WPE / WPE_APIKEY constants
+
 ## Sources & Evergreen References
 
-### Canonical docs
+### Live sources (fetched on every run)
 - [WP Engine Support](https://wpengine.com/support/) — root
-- [Disallowed Plugins](https://wpengine.com/support/disallowed-plugins/) — current list (re-fetch monthly)
-- [WP Engine for Developers](https://wpengine.com/developers/) — environment specs
-- [Cache Exclusions](https://wpengine.com/support/cache/) — cookie/header rules
+- [Disallowed Plugins](https://wpengine.com/support/disallowed-plugins/) — current list
+- [Cache Rules](https://wpengine.com/support/cache/) — EverCache
+- [Developers](https://wpengine.com/developers/) — environment specs
+- [WPE Changelog](https://wpengine.com/changelog/) — recent platform changes
 
 ### Last reviewed
-- 2026-04-29 — re-fetch the disallowed-plugins list monthly (changes)
+2026-04-30 — runtime-evergreen

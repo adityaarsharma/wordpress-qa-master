@@ -1,91 +1,161 @@
 ---
 name: orbit-host-kinsta
-description: Kinsta compatibility audit — disallowed plugins, Cloudflare Enterprise edge caching, Kinsta CDN, object cache (Redis Pro available as add-on), staging push behaviour, MU plugin enforcement. Use when the user says "Kinsta", "managed WP Kinsta", "before customer hosts on Kinsta".
+description: Kinsta hosting compat audit — fetches Kinsta's CURRENT banned-plugins list + cache rules + Redis availability AT RUNTIME (not from a snapshot). Auto-stays-current with Kinsta's policy changes. Use when the user says "Kinsta", "managed WP Kinsta", "is my plugin Kinsta-compatible", "Kinsta banned plugins", or before customer hosts on Kinsta.
 ---
 
-# 🪐 orbit-host-kinsta — Kinsta compat
+# 🪐 orbit-host-kinsta — Runtime-evergreen Kinsta compat
 
-Kinsta = Google Cloud + Cloudflare Enterprise + their own MU plugins. Their stack is more permissive than WPE but still has gotchas.
+> Banned-plugins lists change. Cache rules change. Redis add-on terms change.
+> This skill fetches what's true today — not what was true when the SKILL.md was written.
 
 ---
 
-## What this skill checks
+## Runtime — fetch live before auditing (DO THIS FIRST)
 
-### 1. Disallowed plugins
-Kinsta blocks select caching / monitoring plugins that conflict with their stack.
+When this skill is invoked:
 
-Current list (re-fetch from Kinsta docs on every audit):
-- Caching: WP Rocket conflicts with Kinsta Cache (use one)
-- Backup: BackupBuddy conflicts with native daily backups
+1. **Fetch in parallel**:
+   - https://kinsta.com/blog/banned-plugins-kinsta/ → CURRENT banned-plugins list
+   - https://kinsta.com/help/edge-caching/ → current edge-caching rules + cookie behaviour
+   - https://kinsta.com/help/redis-cache/ → Redis add-on availability + plans
+   - https://kinsta.com/help/multidev-environments/ → staging / multidev setup
+   - https://kinsta.com/changelog/ → recent platform changes
+
+2. **Synthesize current state**:
+   - "Is my plugin (or any of its bundled deps) on the banned list as of today?"
+   - "What cache rules apply on Kinsta right now? What cookie patterns bust the edge cache?"
+   - "Is Redis included or paid add-on on the customer's plan tier?"
+   - "Has Kinsta added any new restrictions / detection patterns this quarter?"
+
+3. **Audit the plugin** against today's fetched rules.
+
+---
+
+## What gets checked
+
+### A. Banned-plugins list match
+The live-fetched banned list. The skill greps `composer.json`, `package.json`, and includes for any banned dependency. As of last fetch, common bans include:
+- WP Rocket conflicts with Kinsta Cache (use one)
+- Some backup plugins conflict with native daily backups
 - Some security plugins that try to write to wp-config
 
-### 2. Cloudflare Enterprise edge caching
-Kinsta runs Cloudflare Enterprise in front. Same cookie rules as WP Engine — your plugin's cookies bust edge cache for everyone unless excluded.
+If the user's plugin BUNDLES a banned plugin as a dependency or is itself banned — flag.
 
-### 3. Object cache (Redis available as add-on)
-**Whitepaper intent:** Redis isn't included in default plans. Plugins assuming `wp_cache_*` always hits a fast persistent cache will be slow on default-plan Kinsta sites.
+### B. Cloudflare Enterprise edge cache
+Kinsta runs Cloudflare Enterprise. Custom plugin cookies bust the edge cache for everyone unless declared.
 
 ```php
-// Detect Redis availability
+// ❌ Sets a unique cookie per visitor — kills cache hit rate
+setcookie( 'my_plugin_visitor_id', wp_generate_uuid4(), ... );
+
+// ✅ Only set cookie when needed (logged-in users, specific contexts)
+if ( is_user_logged_in() ) setcookie( 'my_plugin_visitor_id', ... );
+
+// Or document for users that they need to add the cookie name to Kinsta's
+// cache exclusion list via MyKinsta → Cache → Page Cache → Cookies to Bypass.
+```
+
+### C. Redis availability detection
+Kinsta's Redis is an add-on (~$100/mo). Default plans don't have Redis = no persistent object cache.
+
+```php
+// Detect persistent cache
 if ( wp_using_ext_object_cache() ) {
-  // Persistent cache — safe to cache aggressively
+  // Persistent — safe to cache aggressively
 } else {
-  // No persistent — short TTLs only
+  // Transient-only — short TTLs
 }
 ```
 
-### 4. MU plugin (`mu-plugins/kinsta-mu-plugins.php`)
-Kinsta installs an MU plugin — your plugin can detect it:
+### D. KINSTA_CACHE_ZONE constant detection
+Kinsta sets `KINSTA_CACHE_ZONE` constant; plugins can detect:
 ```php
 if ( defined( 'KINSTA_CACHE_ZONE' ) ) {
-  // Running on Kinsta
+  // Running on Kinsta — adjust if needed
 }
 ```
 
-### 5. Staging environment
-Kinsta gives 1 staging environment per site. Your plugin should detect:
+### E. Multidev / staging awareness
 ```php
-if ( wp_get_environment_type() === 'staging' ) {
-  // Disable production-only behaviour (analytics tracking, payment live mode)
+$env = wp_get_environment_type();
+if ( $env === 'staging' ) {
+  // Disable production-only behaviour (analytics, payment live mode)
 }
 ```
 
-### 6. PHP version flexibility
-Kinsta supports PHP 7.4 / 8.0 / 8.1 / 8.2 / 8.3 — typically a release behind PHP main.
+### F. Disk write performance
+Kinsta uses GCP persistent disks — slower than local SSD. Plugins writing many small files (logs, cache) should batch.
 
-### 7. Disk write performance
-Kinsta uses GCP persistent disks — slower than local SSD. Plugins that write large files frequently (logs) should batch.
+### G. NEW restrictions discovered live
+Whatever the fetched changelog / banned-plugins list has added since the embedded rules were last verified — automatically applied. The skill doesn't need to be manually updated.
 
 ---
 
 ## Output
 
 ```markdown
-# Kinsta Compat — my-plugin
+# Kinsta Compat — my-plugin · 2026-04-30
 
-✓ Not on disallowed list
-⚠ Plugin writes 1 log line per request — recommend batching (>100 writes/sec on busy site = perf hit)
-✓ Detects KINSTA_CACHE_ZONE constant
-✓ Uses wp_cache_set (works with Redis when available)
-✓ Honours wp_get_environment_type for staging mode
+> Per kinsta.com/blog/banned-plugins-kinsta (fetched 2026-04-30 14:32 UTC):
+> Banned-plugins list as of today: 14 entries
+> My plugin or its deps on banned list: 0 ✓
+
+## Edge cache (Cloudflare Enterprise)
+- ⚠ Plugin sets `my_plugin_visitor_id` cookie on every page load
+   → Per kinsta.com/help/edge-caching (fetched today):
+     non-WP cookies bust cache for the entire visitor session
+   → Either restrict to logged-in users OR document for customers to add to bypass list
+
+## Redis
+- ✓ Plugin uses wp_cache_set/get (works on Redis-add-on plans)
+- ⚠ Default-plan customers (no Redis): plugin will be slow on these
+  → Document this; OR add transient fallback for hot paths
+
+## Multidev / staging
+- ✓ Plugin honours wp_get_environment_type
+- ✓ Live-mode payment skipped on staging
+
+## NEW (since last skill check, per fetched changelog 2026-04-22):
+- Kinsta tightened CSP defaults — your inline-script in admin/footer.php
+  may need a nonce now. Verify on the customer's site.
 ```
 
 ---
 
 ## Pair with
 
-- `/orbit-cache-compat` — Redis + edge caching
-- `/orbit-host-wpengine` — similar concerns
+- `/orbit-cache-compat` — broader cache strategy
+- `/orbit-host-wpengine` — similar managed-host concerns
+- `/orbit-host-cloudways` / `/orbit-host-pantheon` — alt managed hosts
 
 ---
 
+## Smoke test
+
+Input: a plugin with `setcookie('my_visitor_id', ...)` on every page.
+Expected:
+- ⚠ MEDIUM finding — cookie busts edge cache
+- Cites kinsta.com/help/edge-caching with today's fetch
+- Banned-plugin check returns 0 matches
+
+---
+
+## Embedded fallback rules (offline)
+- Bundled banned-plugin overlap → flag
+- Cookie-busting edge cache → flag
+- Assume Redis only on paid plans
+- Use `KINSTA_CACHE_ZONE` constant for detection
+- `wp_get_environment_type()` for staging detection
+
 ## Sources & Evergreen References
 
-### Canonical docs
-- [Kinsta Help Center](https://kinsta.com/help/) — root
-- [Banned Plugins](https://kinsta.com/blog/banned-plugins-kinsta/) — current list
-- [Kinsta CDN + Edge](https://kinsta.com/help/edge-caching/) — caching layer
-- [Redis Add-on](https://kinsta.com/help/redis-cache/) — when available
+### Live sources (fetched on every run)
+- [Kinsta Help](https://kinsta.com/help/) — root
+- [Banned Plugins List](https://kinsta.com/blog/banned-plugins-kinsta/) — current list
+- [Edge Caching](https://kinsta.com/help/edge-caching/) — rules
+- [Redis Add-on](https://kinsta.com/help/redis-cache/) — availability
+- [Multidev](https://kinsta.com/help/multidev-environments/) — staging
+- [Kinsta Changelog](https://kinsta.com/changelog/) — recent platform changes
 
 ### Last reviewed
-- 2026-04-29 — re-fetch banned-plugin list quarterly
+2026-04-30 — runtime-evergreen; banned list re-fetched on every run
